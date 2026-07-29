@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block title %}{{ student.full_name }} - {{ subject.name }} Results - SchoolBridge{% endblock %}
+{% block content %}
+<div class="page-header d-flex justify-content-between align-items-center">
+    <h3><i class="bi bi-file-text"></i> {{ student.full_name }} - {{ subject.name }} Results</h3>
+    <a href="{{ url_for('teacher_class') }}" class="btn btn-outline-primary"><i class="bi bi-arrow-left"></i> Back to Class</a>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h5 class="mb-0">Monthly Tests</h5>
+    </div>
+    <div class="card-body">
+        {% if monthly_tests %}
+        <table class="table table-sm table-hover">
+            <thead>
+                <tr>
+                    <th>Year</th><th>Term</th><th>Month</th><th>Marks</th><th>Grade</th><th>Comment</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for mt in monthly_tests %}
+                <tr>
+                    <td>{{ mt.academic_year }}</td>
+                    <td>{{ mt.term }}</td>
+                    <td>{{ mt.month }}</td>
+                    <td>{{ mt.marks }}/{{ mt.total_marks }}</td>
+                    <td><span class="grade-{{ mt.grade(subject.level) }}">{{ mt.grade(subject.level) }}</span></td>
+                    <td><small class="text-muted">{{ mt.comment or '-' }}</small></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p class="text-muted">No monthly test records.</p>
+        {% endif %}
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h5 class="mb-0">Exam Marks</h5>
+    </div>
+    <div class="card-body">
+        {% if exam_marks %}
+        <table class="table table-sm table-hover">
+            <thead>
+                <tr>
+                    <th>Year</th><th>Term</th><th>Exam Type</th><th>Marks</th><th>Grade</th><th>Comment</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for em in exam_marks %}
+                <tr>
+                    <td>{{ em.academic_year }}</td>
+                    <td>{{ em.term }}</td>
+                    <td>{{ em.exam_type }}</td>
+                    <td>{{ em.marks }}/{{ em.total_marks }}</td>
+                    <td><span class="grade-{{ em.grade(subject.level) }}">{{ em.grade(subject.level) }}</span></td>
+                    <td><small class="text-muted">{{ em.comment or '-' }}</small></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p class="text-muted">No exam records.</p>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

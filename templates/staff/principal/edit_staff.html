@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}Edit Staff - SchoolBridge{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header"><h5 class="mb-0"><i class="bi bi-pencil"></i> Edit: {{ staff.full_name }}</h5></div>
+            <div class="card-body">
+                <form method="POST">
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Full Name</label>
+                            <input type="text" class="form-control" name="full_name" value="{{ staff.full_name }}" required>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Email</label>
+                            <input type="email" class="form-control" name="email" value="{{ staff.email }}" required>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">Phone</label>
+                            <input type="text" class="form-control" name="phone" value="{{ staff.phone or '' }}">
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">Role</label>
+                            <select class="form-select" name="role" id="staffRole" required>
+                                <option value="teacher" {{ 'selected' if staff.role == 'teacher' }}>Teacher</option>
+                                <option value="cashier" {{ 'selected' if staff.role == 'cashier' }}>Cashier</option>
+                                <option value="admin" {{ 'selected' if staff.role == 'admin' }}>Admin</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4 mb-3" id="subjectGroup">
+                            <label class="form-label">Subject</label>
+                            <select class="form-select" name="subject_id">
+                                <option value="">-- Select Subject --</option>
+                                {% for subject in subjects %}
+                                <option value="{{ subject.id }}" {{ 'selected' if staff.subject_id == subject.id }}>{{ subject.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">New Password (leave blank to keep current)</label>
+                        <input type="text" class="form-control" name="password" placeholder="Leave blank">
+                    </div>
+                    <p class="text-muted small">Reg Number: {{ staff.reg_number or 'N/A' }}</p>
+                    <button type="submit" class="btn btn-primary w-100"><i class="bi bi-save"></i> Update Staff</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+<script>
+document.getElementById('staffRole').addEventListener('change', function() {
+    document.getElementById('subjectGroup').style.display = this.value === 'teacher' ? '' : 'none';
+});
+</script>
+{% endblock %}

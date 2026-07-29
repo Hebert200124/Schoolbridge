@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+{% block title %}Principal - SchoolBridge{% endblock %}
+{% block content %}
+<div class="page-header d-flex justify-content-between align-items-center">
+    <h3><i class="bi bi-people"></i> Principal Dashboard</h3>
+    <a href="{{ url_for('principal_add_staff') }}" class="btn btn-primary"><i class="bi bi-person-plus"></i> Add Staff</a>
+</div>
+
+<ul class="nav nav-tabs mb-4" id="principalTabs">
+    <li class="nav-item"><button class="nav-link active" id="staff-tab" data-bs-toggle="tab" data-bs-target="#staff" type="button">Staff Members</button></li>
+    <li class="nav-item"><button class="nav-link" id="students-tab" data-bs-toggle="tab" data-bs-target="#students" type="button">Students</button></li>
+</ul>
+
+<div class="tab-content">
+    <div class="tab-pane fade show active" id="staff">
+        <div class="card">
+            <div class="card-header"><h5 class="mb-0"><i class="bi bi-people"></i> All Staff Members</h5></div>
+            <div class="card-body">
+                {% if staff %}
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Username</th><th>Reg Number</th><th>Full Name</th><th>Role</th><th>Subject</th><th>Email</th><th>Phone</th><th>Status</th><th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for member in staff %}
+                            <tr>
+                                <td>{{ member.username }}</td>
+                                <td><small>{{ member.reg_number or '-' }}</small></td>
+                                <td>{{ member.full_name }}</td>
+                                <td><span class="badge bg-{{ 'primary' if member.role == 'teacher' else 'success' if member.role == 'cashier' else 'info' if member.role == 'admin' else 'warning' }}">{{ member.role|title }}</span></td>
+                                <td>{{ member.teacher_subject.name if member.teacher_subject else '-' }}</td>
+                                <td><small>{{ member.email }}</small></td>
+                                <td><small>{{ member.phone or '-' }}</small></td>
+                                <td>{% if member.is_active %}<span class="badge bg-success">Active</span>{% else %}<span class="badge bg-danger">Inactive</span>{% endif %}</td>
+                                <td>
+                                    <a href="{{ url_for('principal_edit_staff', staff_id=member.id) }}" class="btn btn-sm btn-outline-primary"><i class="bi bi-pencil"></i></a>
+                                    {% if member.role != 'principal' %}
+                                    <a href="{{ url_for('principal_fire_staff', staff_id=member.id) }}" class="btn btn-sm btn-outline-danger" onclick="return confirm('Fire {{ member.full_name }} and remove their login?')"><i class="bi bi-person-x"></i></a>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <p class="text-muted">No staff registered.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="tab-pane fade" id="students">
+        <div class="card">
+            <div class="card-header"><h5 class="mb-0"><i class="bi bi-mortarboard"></i> All Students — Fees & Results</h5></div>
+            <div class="card-body">
+                {% if students %}
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Student ID</th><th>Name</th><th>Form</th><th>Total Fees</th><th>Amount Paid</th><th>Balance</th><th>Status</th><th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for s in students %}
+                            {% set sf = student_fees[s.id] %}
+                            <tr>
+                                <td><strong>{{ s.student_id }}</strong></td>
+                                <td>{{ s.full_name }}</td>
+                                <td>{{ s.form }}</td>
+                                <td>${{ "%.2f"|format(sf.fee.total_fees) if sf.fee else '0.00' }}</td>
+                                <td>${{ "%.2f"|format(sf.total_paid) }}</td>
+                                <td class="{% if sf.fee and sf.fee.balance > 0 %}text-danger fw-bold{% else %}text-success{% endif %}">
+                                    ${{ "%.2f"|format(sf.fee.balance) if sf.fee else '0.00' }}
+                                </td>
+                                <td>{% if s.is_active %}<span class="badge bg-success">Active</span>{% else %}<span class="badge bg-danger">Transferred</span>{% endif %}</td>
+                                <td>
+                                    <a href="{{ url_for('principal_student_results', student_id=s.id) }}" class="btn btn-sm btn-info text-white"><i class="bi bi-file-text"></i> Results</a>
+                                    <a href="{{ url_for('principal_dismiss_student', student_id=s.id) }}" class="btn btn-sm btn-outline-danger" onclick="return confirm('Dismiss {{ s.full_name }} completely? This deletes all records.')"><i class="bi bi-person-x"></i></a>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <p class="text-muted">No students.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

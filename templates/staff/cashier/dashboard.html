@@ -1,0 +1,122 @@
+{% extends "base.html" %}
+{% block title %}Cashier Dashboard - SchoolBridge{% endblock %}
+{% block content %}
+<div class="page-header d-flex justify-content-between align-items-center">
+    <h3><i class="bi bi-cash-coin"></i> Cashier Dashboard</h3>
+    <a href="{{ url_for('cashier_student_fees') }}" class="btn btn-primary"><i class="bi bi-search"></i> Search Student</a>
+</div>
+
+<div class="row mb-4">
+    <div class="col-md-6">
+        <div class="card stat-card bg-warning text-white">
+            <div class="card-body">
+                <div class="stat-icon"><i class="bi bi-clock-history"></i></div>
+                <p class="stat-number">{{ pending }}</p>
+                <p class="stat-label">Payments Pending Clearance</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card stat-card bg-success text-white">
+            <div class="card-body">
+                <div class="stat-icon"><i class="bi bi-check-circle"></i></div>
+                <p class="stat-number">{{ payments|selectattr('cleared')|list|length }}</p>
+                <p class="stat-label">Cleared Payments</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h5 class="mb-0"><i class="bi bi-people-fill"></i> All Students - Fee Status</h5>
+    </div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>Student ID</th>
+                        <th>Name</th>
+                        <th>Form</th>
+                        <th>Total Fees</th>
+                        <th>Amount Paid</th>
+                        <th>Balance</th>
+                        <th>Status</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for s in all_students %}
+                    {% set fa = s.fee_account %}
+                    <tr>
+                        <td><strong>{{ s.student_id }}</strong></td>
+                        <td>{{ s.full_name }}</td>
+                        <td>{{ s.form }}</td>
+                        <td>${{ "%.2f"|format(fa.total_fees) if fa else '0.00' }}</td>
+                        <td>${{ "%.2f"|format(fa.amount_paid) if fa else '0.00' }}</td>
+                        <td>
+                            {% if fa %}
+                                {% if fa.balance <= 0 %}
+                                <span class="text-success fw-bold">$0.00</span>
+                                {% else %}
+                                <span class="text-danger fw-bold">${{ "%.2f"|format(fa.balance) }}</span>
+                                {% endif %}
+                            {% else %}
+                                <span class="text-muted">-</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if fa and fa.balance <= 0 %}
+                            <span class="badge bg-success">Paid</span>
+                            {% else %}
+                            <span class="badge bg-danger">Outstanding</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <a href="{{ url_for('cashier_student_fees') }}?sid={{ s.student_id }}" class="btn btn-sm btn-outline-primary">
+                                <i class="bi bi-wallet2"></i>
+                            </a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div class="card mt-3">
+    <div class="card-header">
+        <h5 class="mb-0"><i class="bi bi-list"></i> Recent Payments</h5>
+    </div>
+    <div class="card-body">
+        {% if payments %}
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>Receipt #</th><th>Student</th><th>Amount</th><th>Method</th><th>Date</th><th>Status</th><th>Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for p in payments %}
+                    <tr>
+                        <td><strong>{{ p.receipt_number }}</strong></td>
+                        <td>{{ p.student.full_name }}</td>
+                        <td>${{ "%.2f"|format(p.amount) }}</td>
+                        <td>{{ p.payment_method or '-' }}</td>
+                        <td>{{ p.created_at.strftime('%d-%m-%Y %H:%M') }}</td>
+                        <td>{% if p.cleared %}<span class="badge bg-success">Cleared</span>{% else %}<span class="badge bg-warning text-dark">Pending</span>{% endif %}</td>
+                        <td>{% if not p.cleared %}<a href="{{ url_for('cashier_clear_payment', payment_id=p.id) }}" class="btn btn-sm btn-success" onclick="return confirm('Clear this payment?')"><i class="bi bi-check-lg"></i> Clear</a>{% endif %}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <p class="text-muted">No payments recorded yet.</p>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

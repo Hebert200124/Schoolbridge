@@ -1,0 +1,262 @@
+{% extends "base.html" %}
+{% block title %}Marks Entry - {{ subject.name }} - SchoolBridge{% endblock %}
+{% block content %}
+<div class="page-header d-flex justify-content-between align-items-center">
+    <h3><i class="bi bi-pencil-square"></i> Marks Entry: {{ subject.name }} ({{ subject.code }})</h3>
+    <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addMarkModal">
+        <i class="bi bi-plus-circle"></i> Add Marks
+    </button>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h5 class="mb-0"><i class="bi bi-people"></i> Students</h5>
+    </div>
+    <div class="card-body">
+        {% if students %}
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>Student ID</th>
+                        <th>Name</th>
+                        <th>Form</th>
+                        <th>Monthly 1</th>
+                        <th>Monthly 2</th>
+                        <th>Monthly 3</th>
+                        <th>Mid-Term</th>
+                        <th>End-Term</th>
+                        <th>Comment</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for student in students %}
+                    <tr>
+                        <td><strong>{{ student.student_id }}</strong></td>
+                        <td>{{ student.full_name }}</td>
+                        <td>{{ student.form }}</td>
+                        {% set s_monthly = marks_data[student.id]['monthly'] %}
+                        {% set s_exam = marks_data[student.id]['exam'] %}
+                        <td>
+                            {% for mt in s_monthly %}
+                                {% if loop.index == 1 %}
+                                    {{ mt.marks }}/{{ mt.total_marks }}
+                                    <span class="grade-{{ mt.grade(subject.level) }}">{{ mt.grade(subject.level) }}</span>
+                                    <button class="btn btn-sm btn-outline-primary edit-mark-btn" data-id="{{ mt.id }}" data-type="monthly" data-marks="{{ mt.marks }}" data-total="{{ mt.total_marks }}" data-comment="{{ mt.comment or '' }}"><i class="bi bi-pencil"></i></button>
+                                    <a href="{{ url_for('teacher_delete_mark', mark_id=mt.id, mark_type='monthly') }}" class="btn btn-sm btn-outline-danger" onclick="return confirm('Delete?')"><i class="bi bi-trash"></i></a>
+                                {% endif %}
+                            {% else %}<span class="text-muted">-</span>{% endfor %}
+                        </td>
+                        <td>
+                            {% for mt in s_monthly %}
+                                {% if loop.index == 2 %}
+                                    {{ mt.marks }}/{{ mt.total_marks }}
+                                    <span class="grade-{{ mt.grade(subject.level) }}">{{ mt.grade(subject.level) }}</span>
+                                    <button class="btn btn-sm btn-outline-primary edit-mark-btn" data-id="{{ mt.id }}" data-type="monthly" data-marks="{{ mt.marks }}" data-total="{{ mt.total_marks }}" data-comment="{{ mt.comment or '' }}"><i class="bi bi-pencil"></i></button>
+                                    <a href="{{ url_for('teacher_delete_mark', mark_id=mt.id, mark_type='monthly') }}" class="btn btn-sm btn-outline-danger" onclick="return confirm('Delete?')"><i class="bi bi-trash"></i></a>
+                                {% endif %}
+                            {% else %}<span class="text-muted">-</span>{% endfor %}
+                        </td>
+                        <td>
+                            {% for mt in s_monthly %}
+                                {% if loop.index == 3 %}
+                                    {{ mt.marks }}/{{ mt.total_marks }}
+                                    <span class="grade-{{ mt.grade(subject.level) }}">{{ mt.grade(subject.level) }}</span>
+                                    <button class="btn btn-sm btn-outline-primary edit-mark-btn" data-id="{{ mt.id }}" data-type="monthly" data-marks="{{ mt.marks }}" data-total="{{ mt.total_marks }}" data-comment="{{ mt.comment or '' }}"><i class="bi bi-pencil"></i></button>
+                                    <a href="{{ url_for('teacher_delete_mark', mark_id=mt.id, mark_type='monthly') }}" class="btn btn-sm btn-outline-danger" onclick="return confirm('Delete?')"><i class="bi bi-trash"></i></a>
+                                {% endif %}
+                            {% else %}<span class="text-muted">-</span>{% endfor %}
+                        </td>
+                        <td>
+                            {% for em in s_exam %}
+                                {% if 'Mid' in em.exam_type %}
+                                    {{ em.marks }}/{{ em.total_marks }}
+                                    <span class="grade-{{ em.grade(subject.level) }}">{{ em.grade(subject.level) }}</span>
+                                    <button class="btn btn-sm btn-outline-primary edit-mark-btn" data-id="{{ em.id }}" data-type="exam" data-marks="{{ em.marks }}" data-total="{{ em.total_marks }}" data-comment="{{ em.comment or '' }}"><i class="bi bi-pencil"></i></button>
+                                    <a href="{{ url_for('teacher_delete_mark', mark_id=em.id, mark_type='exam') }}" class="btn btn-sm btn-outline-danger" onclick="return confirm('Delete?')"><i class="bi bi-trash"></i></a>
+                                {% endif %}
+                            {% else %}<span class="text-muted">-</span>{% endfor %}
+                        </td>
+                        <td>
+                            {% for em in s_exam %}
+                                {% if 'End' in em.exam_type or 'Final' in em.exam_type %}
+                                    {{ em.marks }}/{{ em.total_marks }}
+                                    <span class="grade-{{ em.grade(subject.level) }}">{{ em.grade(subject.level) }}</span>
+                                    <button class="btn btn-sm btn-outline-primary edit-mark-btn" data-id="{{ em.id }}" data-type="exam" data-marks="{{ em.marks }}" data-total="{{ em.total_marks }}" data-comment="{{ em.comment or '' }}"><i class="bi bi-pencil"></i></button>
+                                    <a href="{{ url_for('teacher_delete_mark', mark_id=em.id, mark_type='exam') }}" class="btn btn-sm btn-outline-danger" onclick="return confirm('Delete?')"><i class="bi bi-trash"></i></a>
+                                {% endif %}
+                            {% else %}<span class="text-muted">-</span>{% endfor %}
+                        </td>
+                        <td>
+                            {% set ns = namespace(comment=None) %}
+                            {% for mt in s_monthly %}{% set ns.comment = mt.comment %}{% endfor %}
+                            {% for em in s_exam %}{% set ns.comment = em.comment %}{% endfor %}
+                            <small class="text-muted">{{ ns.comment or '-' }}</small>
+                        </td>
+                        <td>
+                            <button class="btn btn-sm btn-success add-for-student" data-student-id="{{ student.id }}" data-student-name="{{ student.full_name }}">
+                                <i class="bi bi-plus"></i> Add
+                            </button>
+                            <a href="{{ url_for('teacher_student_results', student_id=student.id) }}" class="btn btn-sm btn-info text-white">
+                                <i class="bi bi-file-text"></i>
+                            </a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <p class="text-muted">No students enrolled in this subject.</p>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Add Mark Modal -->
+<div class="modal fade" id="addMarkModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="POST" action="{{ url_for('teacher_add_mark') }}">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-plus-circle"></i> Add Marks</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Student</label>
+                        <select class="form-select" name="student_id" id="markStudentSelect" required>
+                            <option value="">-- Select Student --</option>
+                            {% for student in students %}
+                            <option value="{{ student.id }}">{{ student.student_id }} - {{ student.full_name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Academic Year</label>
+                        <input type="number" class="form-control" name="academic_year" value="{{ now().year }}" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Mark Type</label>
+                        <select class="form-select" name="mark_type" id="markType" required>
+                            <option value="monthly">Monthly Test</option>
+                            <option value="exam">Exam</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Term</label>
+                        <select class="form-select" name="term" required>
+                            <option value="Term 1">Term 1</option>
+                            <option value="Term 2">Term 2</option>
+                            <option value="Term 3">Term 3</option>
+                        </select>
+                    </div>
+                    <div class="mb-3" id="monthGroup">
+                        <label class="form-label">Month</label>
+                        <select class="form-select" name="month">
+                            <option value="January">January</option><option value="February">February</option>
+                            <option value="March">March</option><option value="April">April</option>
+                            <option value="May">May</option><option value="June">June</option>
+                            <option value="July">July</option><option value="August">August</option>
+                            <option value="September">September</option><option value="October">October</option>
+                            <option value="November">November</option><option value="December">December</option>
+                        </select>
+                    </div>
+                    <div class="mb-3" id="examTypeGroup" style="display:none;">
+                        <label class="form-label">Exam Type</label>
+                        <select class="form-select" name="exam_type">
+                            <option value="Mid-Term">Mid-Term Exam</option>
+                            <option value="End-Term">End-Term Exam</option>
+                            <option value="Final">Final Exam</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Marks</label>
+                        <input type="number" class="form-control" name="marks" min="0" max="100" step="0.5" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Total Marks</label>
+                        <input type="number" class="form-control" name="total_marks" value="100" min="1" step="0.5">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Comment <small class="text-muted">(optional)</small></label>
+                        <textarea class="form-control" name="comment" rows="2" placeholder="Brief comment on student's performance..."></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save Marks</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Mark Modal -->
+<div class="modal fade" id="editMarkModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="POST" action="" id="editMarkForm">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-pencil"></i> Edit Marks</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" name="mark_type" id="editMarkType">
+                    <div class="mb-3">
+                        <label class="form-label">Marks</label>
+                        <input type="number" class="form-control" name="marks" id="editMarks" min="0" max="100" step="0.5" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Total Marks</label>
+                        <input type="number" class="form-control" name="total_marks" id="editTotalMarks" min="1" step="0.5">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Comment <small class="text-muted">(optional)</small></label>
+                        <textarea class="form-control" name="comment" id="editComment" rows="2"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Update Marks</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+document.getElementById('markType').addEventListener('change', function() {
+    document.getElementById('monthGroup').style.display = this.value === 'monthly' ? '' : 'none';
+    document.getElementById('examTypeGroup').style.display = this.value === 'exam' ? '' : 'none';
+});
+
+document.querySelectorAll('.add-for-student').forEach(btn => {
+    btn.addEventListener('click', function() {
+        const sid = this.getAttribute('data-student-id');
+        const sname = this.getAttribute('data-student-name');
+        document.getElementById('markStudentSelect').value = sid;
+        var modal = new bootstrap.Modal(document.getElementById('addMarkModal'));
+        modal.show();
+    });
+});
+
+document.querySelectorAll('.edit-mark-btn').forEach(btn => {
+    btn.addEventListener('click', function() {
+        const id = this.getAttribute('data-id');
+        const type = this.getAttribute('data-type');
+        const marks = this.getAttribute('data-marks');
+        const total = this.getAttribute('data-total');
+        const comment = this.getAttribute('data-comment');
+        document.getElementById('editMarkType').value = type;
+        document.getElementById('editMarks').value = marks;
+        document.getElementById('editTotalMarks').value = total;
+        document.getElementById('editComment').value = comment;
+        document.getElementById('editMarkForm').action = '/staff/teacher/marks/edit/' + id;
+        var modal = new bootstrap.Modal(document.getElementById('editMarkModal'));
+        modal.show();
+    });
+});
+</script>
+{% endblock %}

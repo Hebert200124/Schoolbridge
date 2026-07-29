@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}Admin - Students - SchoolBridge{% endblock %}
+{% block content %}
+<div class="page-header d-flex justify-content-between align-items-center">
+    <h3><i class="bi bi-people-fill"></i> Student Management</h3>
+    <a href="{{ url_for('admin_add_student') }}" class="btn btn-primary"><i class="bi bi-person-plus"></i> Add New Student</a>
+</div>
+
+<div class="card">
+    <div class="card-header"><h5 class="mb-0"><i class="bi bi-list"></i> All Students</h5></div>
+    <div class="card-body">
+        {% if students %}
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>Student ID</th><th>Reg Number</th><th>Name</th><th>Form</th><th>Email</th><th>Phone</th><th>Subjects</th><th>Status</th><th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for student in students %}
+                    <tr>
+                        <td><strong>{{ student.student_id }}</strong></td>
+                        <td><small>{{ student.reg_number or '-' }}</small></td>
+                        <td>{{ student.full_name }}</td>
+                        <td>{{ student.form }}</td>
+                        <td><small>{{ student.email or '-' }}</small></td>
+                        <td><small>{{ student.phone or '-' }}</small></td>
+                        <td>{% for ss in student.subjects %}<span class="badge bg-primary">{{ ss.subject.name }}</span> {% endfor %}</td>
+                        <td>{% if student.is_active %}<span class="badge bg-success">Active</span>{% else %}<span class="badge bg-danger">Transferred</span>{% endif %}</td>
+                        <td>
+                            <a href="{{ url_for('admin_edit_student', student_id=student.id) }}" class="btn btn-sm btn-outline-primary"><i class="bi bi-pencil"></i></a>
+                            <a href="{{ url_for('admin_deactivate_student', student_id=student.id) }}" class="btn btn-sm btn-outline-{{ 'danger' if student.is_active else 'success' }}" onclick="return confirm('{{ 'Deactivate' if student.is_active else 'Reactivate' }} this student?')">
+                                <i class="bi bi-{{ 'person-x' if student.is_active else 'person-check' }}"></i>
+                            </a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <p class="text-muted">No students registered yet.</p>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% block title %}My Class - {{ subject.name }} - SchoolBridge{% endblock %}
+{% block content %}
+<div class="page-header d-flex justify-content-between align-items-center">
+    <h3><i class="bi bi-people"></i> My Class: {{ subject.name }} ({{ subject.code }})</h3>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h5 class="mb-0"><i class="bi bi-people-fill"></i> Students Enrolled ({{ students|length }})</h5>
+    </div>
+    <div class="card-body">
+        {% if students %}
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>Student ID</th>
+                        <th>Name</th>
+                        <th>Form</th>
+                        <th>Email</th>
+                        <th>Latest Remark</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for student in students %}
+                    {% set latest_remark = student.teacher_remarks|sort(attribute='created_at', reverse=True)|first %}
+                    <tr>
+                        <td><strong>{{ student.student_id }}</strong></td>
+                        <td>{{ student.full_name }}</td>
+                        <td>{{ student.form }}</td>
+                        <td><small>{{ student.email or '-' }}</small></td>
+                        <td>
+                            {% if latest_remark %}
+                            <small class="text-muted">{{ latest_remark.remark[:60] }}{% if latest_remark.remark|length > 60 %}...{% endif %}</small>
+                            <br><small class="text-muted" style="font-size:0.7rem;">{{ latest_remark.created_at.strftime('%d %b') }}</small>
+                            {% else %}<span class="text-muted">-</span>{% endif %}
+                        </td>
+                        <td>
+                            <a href="{{ url_for('teacher_student_results', student_id=student.id) }}" class="btn btn-sm btn-primary">
+                                <i class="bi bi-file-text"></i> Results
+                            </a>
+                            <button class="btn btn-sm btn-outline-info add-remark-btn" data-student-id="{{ student.id }}" data-student-name="{{ student.full_name }}">
+                                <i class="bi bi-chat"></i> Remark
+                            </button>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <p class="text-muted">No students enrolled in this subject.</p>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Remark Modal -->
+<div class="modal fade" id="remarkModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="POST" action="{{ url_for('teacher_save_remark') }}">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-chat-quote"></i> Add Remark for <span id="remarkStudentName"></span></h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" name="student_id" id="remarkStudentId">
+                    <div class="mb-3">
+                        <label class="form-label">Remark</label>
+                        <textarea class="form-control" name="remark" rows="3" required placeholder="e.g. Tendai is improving well in Mathematics. Keep up the good work!"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg"></i> Save Remark</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+document.querySelectorAll('.add-remark-btn').forEach(btn => {
+    btn.addEventListener('click', function() {
+        document.getElementById('remarkStudentId').value = this.getAttribute('data-student-id');
+        document.getElementById('remarkStudentName').textContent = this.getAttribute('data-student-name');
+        new bootstrap.Modal(document.getElementById('remarkModal')).show();
+    });
+});
+</script>
+{% endblock %}

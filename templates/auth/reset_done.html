@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Password Reset - SchoolBridge{% endblock %}
+{% block content %}
+<div class="login-container">
+    <div class="card login-card">
+        <div class="login-header bg-success">
+            <h2><i class="bi bi-check-circle"></i> Password Reset</h2>
+            <p class="mb-0 opacity-75">Your password has been reset successfully</p>
+        </div>
+        <div class="card-body p-4">
+            <div class="alert alert-success">
+                <i class="bi bi-check-circle-fill"></i> Your new strong password has been generated.
+            </div>
+            <div class="text-center mb-4 p-3 bg-light rounded">
+                <p class="text-muted mb-1">Your new password:</p>
+                <div class="h3 fw-bold text-primary font-monospace">{{ new_password }}</div>
+                <p class="text-muted mt-2 mb-0"><small>Please copy this password and log in. You can change it later.</small></p>
+            </div>
+            <a href="{{ url_for('auth_login') }}" class="btn btn-primary w-100"><i class="bi bi-box-arrow-in-right"></i> Go to Login</a>
+        </div>
+    </div>
+</div>
+{% endblock %}

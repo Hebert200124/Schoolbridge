@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% block title %}{{ student.full_name }} - Full Results - SchoolBridge{% endblock %}
+{% block content %}
+<div class="page-header d-flex justify-content-between align-items-center">
+    <h3><i class="bi bi-file-text"></i> {{ student.full_name }} ({{ student.student_id }}) — Full Academic Record</h3>
+    <a href="{{ url_for('principal_dashboard') }}" class="btn btn-outline-primary"><i class="bi bi-arrow-left"></i> Back</a>
+</div>
+
+{% for subj in subjects %}
+{% set s_monthly = monthly_tests|selectattr('subject_id', 'equalto', subj.id)|list %}
+{% set s_exam = exam_marks|selectattr('subject_id', 'equalto', subj.id)|list %}
+{% set level = 'A' if '6' in student.form or '5' in student.form else 'O' %}
+<div class="card mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h5 class="mb-0">{{ subj.name }} ({{ subj.code }}) <span class="badge bg-{{ 'warning' if level == 'A' else 'primary' }}">{{ level }}-Level</span></h5>
+    </div>
+    <div class="card-body">
+        {% if s_monthly or s_exam %}
+        <div class="row">
+            <div class="col-md-6">
+                <h6>Monthly Tests</h6>
+                <table class="table table-sm table-bordered">
+                    <thead><tr><th>Year</th><th>Term</th><th>Month</th><th>Marks</th><th>Grade</th><th>Teacher Comment</th></tr></thead>
+                    <tbody>
+                        {% for mt in s_monthly %}
+                        <tr>
+                            <td>{{ mt.academic_year }}</td><td>{{ mt.term }}</td><td>{{ mt.month }}</td>
+                            <td>{{ mt.marks }}/{{ mt.total_marks }}</td>
+                            <td><span class="grade-{{ mt.grade(level) }}">{{ mt.grade(level) }}</span></td>
+                            <td><small class="text-muted">{{ mt.comment or '-' }}</small></td>
+                        </tr>
+                        {% else %}
+                        <tr><td colspan="6" class="text-muted">No monthly tests.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <div class="col-md-6">
+                <h6>Exams</h6>
+                <table class="table table-sm table-bordered">
+                    <thead><tr><th>Year</th><th>Term</th><th>Exam</th><th>Marks</th><th>Grade</th><th>Teacher Comment</th></tr></thead>
+                    <tbody>
+                        {% for em in s_exam %}
+                        <tr>
+                            <td>{{ em.academic_year }}</td><td>{{ em.term }}</td><td>{{ em.exam_type }}</td>
+                            <td>{{ em.marks }}/{{ em.total_marks }}</td>
+                            <td><span class="grade-{{ em.grade(level) }}">{{ em.grade(level) }}</span></td>
+                            <td><small class="text-muted">{{ em.comment or '-' }}</small></td>
+                        </tr>
+                        {% else %}
+                        <tr><td colspan="6" class="text-muted">No exams.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% else %}
+        <p class="text-muted">No results recorded yet.</p>
+        {% endif %}
+
+        <hr>
+        <h6>Principal's Comment</h6>
+        {% set pc_key = (subj.id, 'Term 1', now().year|string) %}
+        {% set pc = pc_by_key.get(pc_key) %}
+        <form method="POST" action="{{ url_for('principal_save_comment') }}" class="row g-2">
+            <input type="hidden" name="student_id" value="{{ student.id }}">
+            <input type="hidden" name="subject_id" value="{{ subj.id }}">
+            <input type="hidden" name="term" value="Term 1">
+            <input type="hidden" name="academic_year" value="{{ now().year }}">
+            <div class="col-md-8">
+                <textarea class="form-control" name="comment" rows="2" placeholder="Add your comment on this student's performance in {{ subj.name }}...">{{ pc.comment if pc else '' }}</textarea>
+            </div>
+            <div class="col-md-4">
+                <button type="submit" class="btn btn-coral"><i class="bi bi-chat"></i> Save Comment</button>
+            </div>
+        </form>
+        {% if pc %}
+        <div class="mt-2 p-2 bg-light border-start border-3 border-coral">
+            <small class="text-muted">Last updated: {{ pc.updated_at.strftime('%d %b %Y, %I:%M %p') if pc.updated_at else pc.created_at.strftime('%d %b %Y, %I:%M %p') }}</small>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% else %}
+<div class="alert alert-info">This student is not enrolled in any subjects.</div>
+{% endfor %}
+{% endblock %}

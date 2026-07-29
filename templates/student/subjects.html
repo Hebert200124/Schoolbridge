@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}My Subjects - SchoolBridge{% endblock %}
+{% block content %}
+<div class="page-header"><h3><i class="bi bi-book"></i> My Subjects & Teachers</h3></div>
+
+{% if subjects %}
+<div class="row">
+    {% for subj in subjects %}
+    {% set teacher = subject_teachers.get(subj.id) %}
+    <div class="col-md-6 mb-4">
+        <div class="card h-100">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">{{ subj.name }}</h5>
+                <span class="badge bg-{{ 'warning' if subj.level == 'A' else 'primary' }}">{{ subj.level }}-Level</span>
+            </div>
+            <div class="card-body">
+                <table class="table table-sm table-borderless">
+                    {% if teacher %}
+                    <tr><th>Teacher:</th><td>{{ teacher.full_name }}</td></tr>
+                    <tr><th>Email:</th><td>{{ teacher.email }}</td></tr>
+                    <tr><th>Phone:</th><td>{{ teacher.phone or '-' }}</td></tr>
+                    {% else %}
+                    <tr><td colspan="2" class="text-muted">Teacher not yet assigned.</td></tr>
+                    {% endif %}
+                </table>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="card">
+    <div class="card-body text-center py-5">
+        <i class="bi bi-book" style="font-size: 3rem; color: #ccc;"></i>
+        <p class="mt-3 text-muted">No subjects assigned to you yet.</p>
+    </div>
+</div>
+{% endif %}
+{% endblock %}

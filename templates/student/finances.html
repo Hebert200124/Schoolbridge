@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}My Finances - SchoolBridge{% endblock %}
+{% block content %}
+<div class="page-header"><h3><i class="bi bi-wallet2"></i> My Financial Statement</h3></div>
+
+<div class="row">
+    <div class="col-md-5">
+        <div class="card">
+            <div class="card-header"><h5 class="mb-0"><i class="bi bi-file-text"></i> Fee Statement</h5></div>
+            <div class="card-body">
+                {% if fee_account %}
+                <table class="table table-bordered">
+                    <tr><th>Term</th><td>{{ fee_account.term }}</td></tr>
+                    <tr><th>Total Fees</th><td class="fw-bold">${{ "%.2f"|format(fee_account.total_fees) }}</td></tr>
+                    <tr><th>Amount Paid</th><td class="text-success fw-bold">${{ "%.2f"|format(fee_account.amount_paid) }}</td></tr>
+                    <tr>
+                        <th>Balance</th>
+                        <td>{% if fee_account.balance <= 0 %}
+                            <span class="text-success fw-bold fs-5">$0.00 (CLEARED)</span>
+                        {% else %}<span class="text-danger fw-bold fs-5">${{ "%.2f"|format(fee_account.balance) }}</span>{% endif %}</td>
+                    </tr>
+                </table>
+                {% if fee_account.balance > 0 %}
+                <div class="alert alert-warning">
+                    <i class="bi bi-exclamation-triangle"></i>
+                    Outstanding: <strong>${{ "%.2f"|format(fee_account.balance) }}</strong>.
+                    Please clear at the cashier's office.
+                </div>
+                {% else %}
+                <div class="alert alert-success"><i class="bi bi-check-circle"></i> Fees fully paid. Thank you!</div>
+                {% endif %}
+                {% else %}
+                <div class="alert alert-info">No fee account information. Check with cashier.</div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-7">
+        <div class="card">
+            <div class="card-header"><h5 class="mb-0"><i class="bi bi-journal-text"></i> Payment History</h5></div>
+            <div class="card-body">
+                {% if payments %}
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead><tr><th>Receipt #</th><th>Amount</th><th>Method</th><th>Date</th><th>Status</th></tr></thead>
+                        <tbody>
+                            {% for p in payments %}
+                            <tr>
+                                <td><strong>{{ p.receipt_number }}</strong></td>
+                                <td class="fw-bold text-success">${{ "%.2f"|format(p.amount) }}</td>
+                                <td>{{ p.payment_method or '-' }}</td>
+                                <td>{{ p.created_at.strftime('%d-%m-%Y') }}</td>
+                                <td>{% if p.cleared %}<span class="badge bg-success">Cleared</span>{% else %}<span class="badge bg-warning text-dark">Pending</span>{% endif %}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                        <tfoot>
+                            <tr class="table-success">
+                                <th>Total Paid</th>
+                                <th class="fw-bold">${{ "%.2f"|format(payments|sum(attribute='amount')) }}</th>
+                                <th colspan="3"></th>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+                {% else %}
+                <div class="text-center py-5">
+                    <i class="bi bi-cash-stack" style="font-size: 3rem; color: #ccc;"></i>
+                    <p class="mt-3 text-muted">No payments recorded yet.</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

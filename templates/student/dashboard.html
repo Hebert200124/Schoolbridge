@@ -1,0 +1,147 @@
+{% extends "base.html" %}
+{% block title %}Student Dashboard - SchoolBridge{% endblock %}
+{% block content %}
+<div class="page-header d-flex justify-content-between align-items-center">
+    <h3><i class="bi bi-speedometer2"></i> Student Dashboard</h3>
+</div>
+
+<div class="row">
+    <div class="col-md-3">
+        <div class="card stat-card bg-primary text-white">
+            <div class="card-body">
+                <div class="stat-icon"><i class="bi bi-book"></i></div>
+                <p class="stat-number">{{ subjects|length }}</p>
+                <p class="stat-label">Subjects</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card stat-card bg-success text-white">
+            <div class="card-body">
+                <div class="stat-icon"><i class="bi bi-file-text"></i></div>
+                <p class="stat-number">{{ monthly_tests|length }}</p>
+                <p class="stat-label">Monthly Tests</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card stat-card bg-info text-white">
+            <div class="card-body">
+                <div class="stat-icon"><i class="bi bi-journal"></i></div>
+                <p class="stat-number">{{ exam_marks|length }}</p>
+                <p class="stat-label">Exam Results</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card stat-card bg-{{ 'success' if fee_account and fee_account.balance <= 0 else 'warning' }} text-white">
+            <div class="card-body">
+                <div class="stat-icon"><i class="bi bi-wallet2"></i></div>
+                {% if fee_account %}
+                <p class="stat-number">${{ "%.0f"|format(fee_account.balance) }}</p>
+                <p class="stat-label">{{ 'Cleared' if fee_account.balance <= 0 else 'Balance' }}</p>
+                {% else %}<p class="stat-number">-</p><p class="stat-label">Balance</p>{% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header"><h5 class="mb-0"><i class="bi bi-book"></i> My Subjects & Teachers</h5></div>
+            <div class="card-body">
+                {% if subjects %}
+                <table class="table table-sm">
+                    <thead><tr><th>Subject</th><th>Level</th><th>Teacher</th><th>Email</th></tr></thead>
+                    <tbody>
+                        {% for subj in subjects %}
+                        {% set teacher = subject_teachers.get(subj.id) %}
+                        <tr>
+                            <td><strong>{{ subj.name }}</strong></td>
+                            <td><span class="badge bg-primary">{{ subj.level }}</span></td>
+                            <td>{{ teacher.full_name if teacher else 'TBA' }}</td>
+                            <td><small>{{ teacher.email if teacher else '-' }}</small></td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}<p class="text-muted">No subjects assigned.</p>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header"><h5 class="mb-0"><i class="bi bi-wallet2"></i> Fee Account</h5></div>
+            <div class="card-body">
+                {% if fee_account %}
+                <p><strong>Term:</strong> {{ fee_account.term }} | <strong>Total:</strong> ${{ "%.2f"|format(fee_account.total_fees) }}</p>
+                <p><strong>Paid:</strong> ${{ "%.2f"|format(fee_account.amount_paid) }} | <strong>Balance:</strong>
+                    {% if fee_account.balance <= 0 %}
+                    <span class="text-success fw-bold">$0.00 (CLEARED)</span>
+                    {% else %}<span class="text-danger fw-bold">${{ "%.2f"|format(fee_account.balance) }}</span>{% endif %}
+                </p>
+                {% else %}<p class="text-muted">No fee account info.</p>{% endif %}
+                <a href="{{ url_for('student_finances') }}" class="btn btn-sm btn-outline-primary">View Full Statement</a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-3">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header"><h5 class="mb-0"><i class="bi bi-chat-quote"></i> Teacher Remarks</h5></div>
+            <div class="card-body" style="max-height: 300px; overflow-y: auto;">
+                {% if teacher_remarks %}
+                {% for tr in teacher_remarks %}
+                <div class="p-2 mb-2 bg-light border-start border-3 border-primary">
+                    <small class="text-muted">{{ tr.teacher.full_name }} <span class="float-end">{{ tr.created_at.strftime('%d %b %Y') }}</span></small>
+                    <p class="mb-0"><em>{{ tr.remark }}</em></p>
+                </div>
+                {% endfor %}
+                {% else %}
+                <p class="text-muted">No remarks from teachers yet.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header"><h5 class="mb-0"><i class="bi bi-calendar-week"></i> Weekly Timetable</h5></div>
+            <div class="card-body">
+                {% if timetables %}
+                <table class="table table-sm table-bordered">
+                    <thead><tr><th>Day</th><th>Time</th><th>Subject</th></tr></thead>
+                    <tbody>
+                        {% for tt in timetables[:10] %}
+                        <tr><td><strong>{{ tt.day_of_week[:3] }}</strong></td><td>{{ tt.start_time }}-{{ tt.end_time }}</td><td>{{ tt.subject_rel.name }}</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                <a href="{{ url_for('student_timetables') }}" class="btn btn-sm btn-outline-primary">Full Timetable</a>
+                {% else %}<p class="text-muted">No timetable published.</p>{% endif %}
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header"><h5 class="mb-0"><i class="bi bi-calendar-check"></i> Upcoming Exams</h5></div>
+            <div class="card-body">
+                {% if exam_timetables %}
+                <table class="table table-sm table-bordered">
+                    <thead><tr><th>Date</th><th>Subject</th><th>Room</th></tr></thead>
+                    <tbody>
+                        {% for et in exam_timetables[:5] %}
+                        <tr><td>{{ et.exam_date.strftime('%d-%m-%Y') }}</td><td>{{ et.subject_rel.name }}</td><td>{{ et.room or '-' }}</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                <a href="{{ url_for('student_timetables') }}" class="btn btn-sm btn-outline-primary">View All</a>
+                {% else %}<p class="text-muted">No exam timetable published.</p>{% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

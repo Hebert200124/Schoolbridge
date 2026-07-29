@@ -1,0 +1,156 @@
+{% extends "base.html" %}
+{% block title %}Timetables - SchoolBridge{% endblock %}
+{% block content %}
+<div class="page-header"><h3><i class="bi bi-calendar-week"></i> Timetable Management</h3></div>
+
+<ul class="nav nav-tabs mb-4">
+    <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#weekly">Weekly Timetable</button></li>
+    <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#exam">Exam Timetable</button></li>
+</ul>
+
+<div class="tab-content">
+    <div class="tab-pane fade show active" id="weekly">
+        <div class="card">
+            <div class="card-header"><h5 class="mb-0"><i class="bi bi-plus-circle"></i> Add Entry</h5></div>
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('principal_add_timetable') }}" class="row g-3">
+                    <div class="col-md-2">
+                        <label class="form-label">Form</label>
+                        <select class="form-select" name="form" required>
+                            {% for f in ['Form 1', 'Form 2', 'Form 3', 'Form 4', 'Form 5', 'Form 6'] %}
+                            <option value="{{ f }}">{{ f }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">Day</label>
+                        <select class="form-select" name="day_of_week" required>
+                            {% for d in ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'] %}
+                            <option value="{{ d }}">{{ d }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">Subject</label>
+                        <select class="form-select" name="subject_id" required>
+                            {% for subj in subjects %}
+                            <option value="{{ subj.id }}">{{ subj.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-1">
+                        <label class="form-label">Start</label>
+                        <input type="time" class="form-control" name="start_time" required>
+                    </div>
+                    <div class="col-md-1">
+                        <label class="form-label">End</label>
+                        <input type="time" class="form-control" name="end_time" required>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">Teacher</label>
+                        <select class="form-select" name="teacher_id" required>
+                            {% for t in teachers %}
+                            <option value="{{ t.id }}">{{ t.full_name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-1">
+                        <label class="form-label">Room</label>
+                        <input type="text" class="form-control" name="room">
+                    </div>
+                    <div class="col-md-1 d-flex align-items-end">
+                        <button type="submit" class="btn btn-primary w-100"><i class="bi bi-plus"></i></button>
+                    </div>
+                </form>
+            </div>
+        </div>
+        <div class="card mt-3">
+            <div class="card-header"><h5 class="mb-0"><i class="bi bi-list"></i> Current Timetables</h5></div>
+            <div class="card-body">
+                {% if timetables %}
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover">
+                        <thead><tr><th>Form</th><th>Day</th><th>Time</th><th>Subject</th><th>Teacher</th><th>Room</th><th>Action</th></tr></thead>
+                        <tbody>
+                            {% for tt in timetables %}
+                            <tr>
+                                <td>{{ tt.form }}</td><td>{{ tt.day_of_week }}</td><td>{{ tt.start_time }}-{{ tt.end_time }}</td>
+                                <td>{{ tt.subject_rel.name }}</td><td>{{ tt.teacher_rel.full_name }}</td><td>{{ tt.room or '-' }}</td>
+                                <td><a href="{{ url_for('principal_delete_timetable', tt_id=tt.id) }}" class="btn btn-sm btn-outline-danger" onclick="return confirm('Delete?')"><i class="bi bi-trash"></i></a></td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}<p class="text-muted">No entries.</p>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="tab-pane fade" id="exam">
+        <div class="card">
+            <div class="card-header"><h5 class="mb-0"><i class="bi bi-plus-circle"></i> Add Exam Entry</h5></div>
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('principal_add_exam_timetable') }}" class="row g-3">
+                    <div class="col-md-2">
+                        <label class="form-label">Form</label>
+                        <select class="form-select" name="form" required>
+                            {% for f in ['Form 1', 'Form 2', 'Form 3', 'Form 4', 'Form 5', 'Form 6'] %}
+                            <option value="{{ f }}">{{ f }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Subject</label>
+                        <select class="form-select" name="subject_id" required>
+                            {% for subj in subjects %}
+                            <option value="{{ subj.id }}">{{ subj.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">Date</label>
+                        <input type="date" class="form-control" name="exam_date" required>
+                    </div>
+                    <div class="col-md-1">
+                        <label class="form-label">Start</label>
+                        <input type="time" class="form-control" name="start_time" required>
+                    </div>
+                    <div class="col-md-1">
+                        <label class="form-label">End</label>
+                        <input type="time" class="form-control" name="end_time" required>
+                    </div>
+                    <div class="col-md-1">
+                        <label class="form-label">Room</label>
+                        <input type="text" class="form-control" name="room">
+                    </div>
+                    <div class="col-md-2 d-flex align-items-end">
+                        <button type="submit" class="btn btn-primary w-100"><i class="bi bi-plus"></i> Add</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+        <div class="card mt-3">
+            <div class="card-header"><h5 class="mb-0"><i class="bi bi-list"></i> Exam Timetables</h5></div>
+            <div class="card-body">
+                {% if exam_timetables %}
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover">
+                        <thead><tr><th>Form</th><th>Subject</th><th>Date</th><th>Time</th><th>Room</th><th>Action</th></tr></thead>
+                        <tbody>
+                            {% for ett in exam_timetables %}
+                            <tr>
+                                <td>{{ ett.form }}</td><td>{{ ett.subject_rel.name }}</td><td>{{ ett.exam_date.strftime('%d-%m-%Y') }}</td>
+                                <td>{{ ett.start_time }}-{{ ett.end_time }}</td><td>{{ ett.room or '-' }}</td>
+                                <td><a href="{{ url_for('principal_delete_exam_timetable', ett_id=ett.id) }}" class="btn btn-sm btn-outline-danger" onclick="return confirm('Delete?')"><i class="bi bi-trash"></i></a></td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}<p class="text-muted">No entries.</p>{% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

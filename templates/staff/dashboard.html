@@ -1,0 +1,157 @@
+{% extends "base.html" %}
+{% block title %}Staff Dashboard - SchoolBridge{% endblock %}
+{% block content %}
+<div class="page-header d-flex justify-content-between align-items-center">
+    <h3><i class="bi bi-speedometer2"></i> Staff Dashboard</h3>
+</div>
+
+<div class="row">
+    {% if current_user.role == 'teacher' %}
+    <div class="col-md-4">
+        <div class="card stat-card bg-primary text-white">
+            <div class="card-body">
+                <div class="stat-icon"><i class="bi bi-book"></i></div>
+                <p class="stat-number">{{ stats.subject_name }}</p>
+                <p class="stat-label">Your Subject</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card stat-card bg-success text-white">
+            <div class="card-body">
+                <div class="stat-icon"><i class="bi bi-people"></i></div>
+                <p class="stat-number">{{ stats.student_count }}</p>
+                <p class="stat-label">Students</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card stat-card bg-info text-white">
+            <div class="card-body">
+                <div class="stat-icon"><i class="bi bi-people-fill"></i></div>
+                <p class="stat-number"><a href="{{ url_for('teacher_class') }}" class="text-white">View Class</a></p>
+                <p class="stat-label">My Students</p>
+            </div>
+        </div>
+    </div>
+
+    {% elif current_user.role == 'cashier' %}
+    <div class="col-md-4">
+        <div class="card stat-card bg-warning text-white">
+            <div class="card-body">
+                <div class="stat-icon"><i class="bi bi-clock-history"></i></div>
+                <p class="stat-number">{{ stats.pending_clearance }}</p>
+                <p class="stat-label">Pending Clearance</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card stat-card bg-success text-white">
+            <div class="card-body">
+                <div class="stat-icon"><i class="bi bi-cash-stack"></i></div>
+                <p class="stat-number">{{ stats.total_payments_today }}</p>
+                <p class="stat-label">Payments Today</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card stat-card bg-primary text-white">
+            <div class="card-body">
+                <div class="stat-icon"><i class="bi bi-search"></i></div>
+                <p class="stat-number"><a href="{{ url_for('cashier_student_fees') }}" class="text-white">Search</a></p>
+                <p class="stat-label">Find Student</p>
+            </div>
+        </div>
+    </div>
+
+    {% elif current_user.role == 'admin' %}
+    <div class="col-md-4">
+        <div class="card stat-card bg-primary text-white">
+            <div class="card-body">
+                <div class="stat-icon"><i class="bi bi-people-fill"></i></div>
+                <p class="stat-number">{{ stats.total_students }}</p>
+                <p class="stat-label">Total Students</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card stat-card bg-success text-white">
+            <div class="card-body">
+                <div class="stat-icon"><i class="bi bi-person-check"></i></div>
+                <p class="stat-number">{{ stats.active_students }}</p>
+                <p class="stat-label">Active Students</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card stat-card bg-info text-white">
+            <div class="card-body">
+                <div class="stat-icon"><i class="bi bi-person-plus"></i></div>
+                <p class="stat-number"><a href="{{ url_for('admin_add_student') }}" class="text-white">Add New</a></p>
+                <p class="stat-label">Register Student</p>
+            </div>
+        </div>
+    </div>
+
+    {% elif current_user.role == 'principal' %}
+    <div class="col-md-3">
+        <div class="card stat-card bg-primary text-white">
+            <div class="card-body">
+                <div class="stat-icon"><i class="bi bi-people"></i></div>
+                <p class="stat-number">{{ stats.total_staff }}</p>
+                <p class="stat-label">Staff Members</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card stat-card bg-success text-white">
+            <div class="card-body">
+                <div class="stat-icon"><i class="bi bi-mortarboard"></i></div>
+                <p class="stat-number">{{ stats.total_students }}</p>
+                <p class="stat-label">Total Students</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card stat-card bg-info text-white">
+            <div class="card-body">
+                <div class="stat-icon"><i class="bi bi-person-check"></i></div>
+                <p class="stat-number">{{ stats.active_students }}</p>
+                <p class="stat-label">Active Students</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card stat-card bg-coral text-white">
+            <div class="card-body">
+                <div class="stat-icon"><i class="bi bi-calendar-week"></i></div>
+                <p class="stat-number"><a href="{{ url_for('principal_timetables') }}" class="text-white">Timetables</a></p>
+                <p class="stat-label">Manage</p>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<div class="card mt-3">
+    <div class="card-header">
+        <h5 class="mb-0"><i class="bi bi-person-circle"></i> Welcome, {{ current_user.full_name }}</h5>
+    </div>
+    <div class="card-body">
+        <p>You are logged in as <span class="badge bg-primary">{{ current_user.role|title }}</span>.</p>
+        {% if current_user.role == 'teacher' %}
+        <p>Use the <a href="{{ url_for('teacher_marks') }}">Marks Entry</a> page to record monthly test and exam marks for your subject.</p>
+        <p>Use the <a href="{{ url_for('teacher_class') }}">My Class</a> page to view your students and their previous results.</p>
+        {% elif current_user.role == 'cashier' %}
+        <p>Use the <a href="{{ url_for('cashier_student_fees') }}">Search Student</a> page to manage fees and record payments.</p>
+        {% elif current_user.role == 'admin' %}
+        <p>Use the <a href="{{ url_for('admin_add_student') }}">Add Student</a> page to register new students.</p>
+        {% elif current_user.role == 'principal' %}
+        <p>Manage staff, students, and timetables from the navigation menu.</p>
+        {% endif %}
+        {% if current_user.reg_number %}
+        <p class="text-muted small">Reg Number: {{ current_user.reg_number }} | Email: {{ current_user.email }}</p>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}Login - SchoolBridge{% endblock %}
+{% block content %}
+<div class="login-container">
+    <div class="card login-card">
+        <div class="login-header">
+            <h2><i class="bi bi-mortarboard-fill"></i> WELCOME TO SCHOOLBRIDGE</h2>
+            <p class="mb-0 opacity-75">School Management Portal</p>
+        </div>
+        <div class="card-body p-4">
+            <form method="POST" action="{{ url_for('auth_login') }}">
+                <div class="mb-3">
+                    <label class="form-label">Username / Student ID</label>
+                    <input type="text" class="form-control" name="username" required placeholder="Enter your username">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Password</label>
+                    <input type="password" class="form-control" name="password" required placeholder="Enter your password">
+                </div>
+                <button type="submit" class="btn btn-primary w-100"><i class="bi bi-box-arrow-in-right"></i> Login</button>
+            </form>
+            <hr class="my-4">
+            <div class="text-center">
+                <small class="text-muted">
+                    <i class="bi bi-info-circle"></i>
+                    NB: Forgot Password? <a href="{{ url_for('auth_reset_password') }}">Reset password</a>
+                </small>
+            </div>
+            <div class="text-center mt-2">
+                <small class="text-muted">Visit <a href="/setup">/setup</a> to initialize the system</small>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
