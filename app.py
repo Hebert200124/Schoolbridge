@@ -4,13 +4,15 @@ from models import db, User, Student, Subject, StudentSubject, MonthlyTest, Exam
 from config import Config
 from functools import wraps
 from datetime import datetime, date, timedelta
+import os
 import random
 import string
-import os
 
 app = Flask(__name__)
 app.config.from_object(Config)
 db.init_app(app)
+with app.app_context():
+    db.create_all()
 login_manager = LoginManager(app)
 login_manager.login_view = 'auth_login'
 login_manager.login_message_category = 'info'
@@ -178,7 +180,7 @@ def auth_reset_password():
         session['reset_user_type'] = 'User' if isinstance(person, User) else 'Student'
         session['reset_user_id'] = person.id
 
-        flash('A verification code has been sent to your phone.', 'info')
+        flash(f'Your 6-digit verification code is: {reset_code}', 'info')
         return redirect(url_for('auth_reset_code'))
 
     return render_template('auth/reset_password.html')
@@ -963,10 +965,9 @@ def student_subjects():
 
 @app.route('/setup')
 def setup():
-    if not app.config.get('ENABLE_SETUP', False):
-        return 'Setup is disabled. Set ENABLE_SETUP=true environment variable to enable.', 403
-    if Subject.query.first() is not None:
-        return 'Database already has data. Delete the database file first if you want to re-run setup.', 400
+    if os.environ.get('ENABLE_SETUP', '').lower() != 'true':
+        return 'Setup is disabled.', 403
+    db.drop_all()
     db.create_all()
 
     ol = [
