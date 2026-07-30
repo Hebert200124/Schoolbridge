@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Edit Fees - SchoolBridge{% endblock %}
+{% block content %}
+<div class="login-container">
+    <div class="card login-card">
+        <div class="login-header">
+            <h2><i class="bi bi-currency-dollar"></i> Edit Student Fees</h2>
+            <p class="mb-0 opacity-75">{{ student.full_name }} ({{ student.student_id }})</p>
+        </div>
+        <div class="card-body p-4">
+            <form method="POST">
+                <div class="mb-3">
+                    <label class="form-label">Total Term Fees</label>
+                    <input type="number" step="0.01" class="form-control" name="total_fees" value="{{ "%.2f"|format(fee_account.total_fees) if fee_account else '0.00' }}" required>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Amount Paid</label>
+                    <input type="number" step="0.01" class="form-control" name="amount_paid" value="{{ "%.2f"|format(fee_account.amount_paid) if fee_account else '0.00' }}" required>
+                </div>
+                <button type="submit" class="btn btn-primary w-100"><i class="bi bi-save"></i> Save Fees</button>
+            </form>
+            <hr class="my-4">
+            <div class="text-center">
+                <a href="{{ url_for('principal_dashboard') }}"><i class="bi bi-arrow-left"></i> Back to Dashboard</a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

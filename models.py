@@ -71,6 +71,7 @@ class Student(UserMixin, db.Model):
     first_name = db.Column(db.String(100), nullable=False)
     last_name = db.Column(db.String(100), nullable=False)
     form = db.Column(db.String(10), nullable=False)
+    curriculum = db.Column(db.String(10), default='ZIMSEC')
     email = db.Column(db.String(120), unique=True)
     phone = db.Column(db.String(20))
     reg_number = db.Column(db.String(50), unique=True)
@@ -194,6 +195,15 @@ class Payment(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 
+class FeeSetting(db.Model):
+    __tablename__ = 'fee_settings'
+
+    id = db.Column(db.Integer, primary_key=True)
+    form = db.Column(db.String(10), unique=True, nullable=False)
+    term_fee = db.Column(db.Float, default=0.0)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
 class TeacherRemark(db.Model):
     __tablename__ = 'teacher_remarks'
 
@@ -237,3 +247,63 @@ class ExamTimetable(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     subject_rel = db.relationship('Subject', backref='exam_timetable_entries', foreign_keys=[subject_id])
+
+
+class ActivityLog(db.Model):
+    __tablename__ = 'activity_logs'
+
+    id = db.Column(db.Integer, primary_key=True)
+    action = db.Column(db.String(100), nullable=False)
+    description = db.Column(db.Text)
+    visibility = db.Column(db.String(10), default='public')
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    student_id = db.Column(db.Integer, db.ForeignKey('students.id'), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    user = db.relationship('User', backref='activities', foreign_keys=[user_id])
+    student = db.relationship('Student', backref='activities', foreign_keys=[student_id])
+
+
+class Activity(db.Model):
+    __tablename__ = 'activities'
+
+    id = db.Column(db.Integer, primary_key=True)
+    title = db.Column(db.String(200), nullable=False)
+    description = db.Column(db.Text)
+    visibility = db.Column(db.String(10), default='all')
+    created_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    creator = db.relationship('User', backref='posted_activities', foreign_keys=[created_by])
+
+
+class StaffLeave(db.Model):
+    __tablename__ = 'staff_leaves'
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    leave_type = db.Column(db.String(50), nullable=False)
+    start_date = db.Column(db.Date, nullable=False)
+    end_date = db.Column(db.Date, nullable=False)
+    status = db.Column(db.String(20), default='Pending')
+    reason = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    staff = db.relationship('User', backref='leaves', foreign_keys=[user_id])
+
+
+class LevyFund(db.Model):
+    __tablename__ = 'levy_funds'
+
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False)
+    total_amount = db.Column(db.Float, default=0.0)
+    amount_collected = db.Column(db.Float, default=0.0)
+    term = db.Column(db.String(10), nullable=False)
+    academic_year = db.Column(db.String(10), default=lambda: str(datetime.now().year))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    @property
+    def balance(self):
+        return self.total_amount - self.amount_collected

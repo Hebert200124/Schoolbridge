@@ -18,11 +18,13 @@
                     <div class="card-header text-center bg-primary text-white"><h6 class="mb-0">{{ day[:3] }}</h6></div>
                     <div class="card-body p-2">
                         {% if timetable_by_day[day] %}
+                        <div class="table-responsive">
                         <table class="table table-sm table-borderless mb-0">
                             {% for tt in timetable_by_day[day] %}
                             <tr><td><small>{{ tt.start_time }}</small></td><td><strong>{{ tt.subject_rel.name }}</strong></td></tr>
                             {% endfor %}
                         </table>
+                        </div>
                         {% else %}<p class="text-muted text-center small mb-0">-</p>{% endif %}
                     </div>
                 </div>
@@ -32,6 +34,7 @@
         <div class="card mt-3">
             <div class="card-header"><h6 class="mb-0">Full Schedule</h6></div>
             <div class="card-body">
+                <div class="table-responsive">
                 <table class="table table-bordered table-hover">
                     <thead class="table-dark">
                         <tr><th>Day</th><th>Time</th><th>Subject</th><th>Teacher</th><th>Room</th></tr>
@@ -50,6 +53,7 @@
                         {% endfor %}
                     </tbody>
                 </table>
+                </div>
             </div>
         </div>
         {% else %}
@@ -62,6 +66,7 @@
         <div class="card">
             <div class="card-header"><h5 class="mb-0">Exam Timetable</h5></div>
             <div class="card-body">
+                <div class="table-responsive">
                 <table class="table table-bordered table-hover">
                     <thead class="table-dark"><tr><th>Date</th><th>Time</th><th>Subject</th><th>Room</th></tr></thead>
                     <tbody>
@@ -75,6 +80,7 @@
                         {% endfor %}
                     </tbody>
                 </table>
+                </div>
             </div>
         </div>
         {% else %}

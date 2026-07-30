@@ -1,47 +1,377 @@
 {% extends "base.html" %}
-{% block title %}Admin - Students - SchoolBridge{% endblock %}
+{% block title %}Admin Dashboard - SchoolBridge{% endblock %}
 {% block content %}
-<div class="page-header d-flex justify-content-between align-items-center">
-    <h3><i class="bi bi-people-fill"></i> Student Management</h3>
-    <a href="{{ url_for('admin_add_student') }}" class="btn btn-primary"><i class="bi bi-person-plus"></i> Add New Student</a>
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h4 class="mb-1">SchoolBridge Dashboard</h4>
+        <p class="text-muted mb-0">Welcome, {{ current_user.full_name }}<br><small>You are logged in as Admin.</small></p>
+    </div>
+    <div>
+        <a href="{{ url_for('admin_add_student') }}" class="btn btn-primary"><i class="bi bi-person-plus"></i> Add Student</a>
+    </div>
 </div>
 
-<div class="card">
-    <div class="card-header"><h5 class="mb-0"><i class="bi bi-list"></i> All Students</h5></div>
-    <div class="card-body">
-        {% if students %}
-        <div class="table-responsive">
-            <table class="table table-hover">
-                <thead>
-                    <tr>
-                        <th>Student ID</th><th>Reg Number</th><th>Name</th><th>Form</th><th>Email</th><th>Phone</th><th>Subjects</th><th>Status</th><th>Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for student in students %}
-                    <tr>
-                        <td><strong>{{ student.student_id }}</strong></td>
-                        <td><small>{{ student.reg_number or '-' }}</small></td>
-                        <td>{{ student.full_name }}</td>
-                        <td>{{ student.form }}</td>
-                        <td><small>{{ student.email or '-' }}</small></td>
-                        <td><small>{{ student.phone or '-' }}</small></td>
-                        <td>{% for ss in student.subjects %}<span class="badge bg-primary">{{ ss.subject.name }}</span> {% endfor %}</td>
-                        <td>{% if student.is_active %}<span class="badge bg-success">Active</span>{% else %}<span class="badge bg-danger">Transferred</span>{% endif %}</td>
-                        <td>
-                            <a href="{{ url_for('admin_edit_student', student_id=student.id) }}" class="btn btn-sm btn-outline-primary"><i class="bi bi-pencil"></i></a>
-                            <a href="{{ url_for('admin_deactivate_student', student_id=student.id) }}" class="btn btn-sm btn-outline-{{ 'danger' if student.is_active else 'success' }}" onclick="return confirm('{{ 'Deactivate' if student.is_active else 'Reactivate' }} this student?')">
-                                <i class="bi bi-{{ 'person-x' if student.is_active else 'person-check' }}"></i>
-                            </a>
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+<div class="row g-3 mb-4">
+    <div class="col-md-3">
+        <div class="card border-left-primary h-100">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h6 class="text-muted mb-1">Total Students</h6>
+                        <h3 class="mb-0">{{ students|length }}</h3>
+                        <small class="text-success">{{ active_students|length }} active</small>
+                    </div>
+                    <div class="fs-2 text-primary"><i class="bi bi-people"></i></div>
+                </div>
+            </div>
         </div>
-        {% else %}
-        <p class="text-muted">No students registered yet.</p>
-        {% endif %}
+    </div>
+    <div class="col-md-3">
+        <div class="card border-left-success h-100">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h6 class="text-muted mb-1">Fee Collection ({{ term }})</h6>
+                        <h3 class="mb-0">${{ "%.0f"|format(total_collected) }}</h3>
+                        <small class="text-muted">of ${{ "%.0f"|format(total_expected) }} expected</small>
+                    </div>
+                    <div class="fs-2 text-success"><i class="bi bi-currency-dollar"></i></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-left-warning h-100">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h6 class="text-muted mb-1">Outstanding</h6>
+                        <h3 class="mb-0 text-danger">${{ "%.0f"|format(outstanding) }}</h3>
+                        <small>{{ outstanding_list|length }} accounts</small>
+                    </div>
+                    <div class="fs-2 text-warning"><i class="bi bi-exclamation-triangle"></i></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-left-info h-100">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h6 class="text-muted mb-1">Staff</h6>
+                        <h3 class="mb-0">{{ staff_count }}</h3>
+                        <small class="text-warning">{{ staff_leaves }} on leave</small>
+                    </div>
+                    <div class="fs-2 text-info"><i class="bi bi-person-badge"></i></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header"><h6 class="mb-0"><i class="bi bi-currency-dollar"></i> Fee Collection Summary — {{ term }}</h6></div>
+            <div class="card-body">
+                <div class="row text-center g-2">
+                    <div class="col-4">
+                        <h5 class="text-primary mb-0">${{ "%.2f"|format(total_expected) }}</h5>
+                        <small class="text-muted">Expected</small>
+                    </div>
+                    <div class="col-4">
+                        <h5 class="text-success mb-0">${{ "%.2f"|format(total_collected) }}</h5>
+                        <small class="text-muted">Collected</small>
+                    </div>
+                    <div class="col-4">
+                        <h5 class="text-danger mb-0">${{ "%.2f"|format(outstanding) }}</h5>
+                        <small class="text-muted">Outstanding</small>
+                    </div>
+                </div>
+                <div class="progress mt-2" style="height:10px;">
+                    {% set pct = (total_collected / total_expected * 100) if total_expected > 0 else 0 %}
+                    <div class="progress-bar bg-success" style="width:{{ pct }}%">{{ "%.1f"|format(pct) }}%</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card">
+            <div class="card-header"><h6 class="mb-0"><i class="bi bi-person-badge"></i> Staff & Attendance</h6></div>
+            <div class="card-body text-center">
+                <h3>{{ staff_count }}</h3>
+                <p class="mb-0">Total Staff</p>
+                <span class="badge bg-warning">{{ staff_leaves }} on leave</span>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card">
+            <div class="card-header"><h6 class="mb-0"><i class="bi bi-clock"></i> Upcoming Exams</h6></div>
+            <div class="card-body p-0">
+                {% if upcoming_exams %}
+                <ul class="list-group list-group-flush">
+                    {% for exam in upcoming_exams[:3] %}
+                    {% set days_left = (exam.exam_date - now().date()).days %}
+                    <li class="list-group-item py-2 small">
+                        <strong>{{ exam.subject_rel.name }}</strong><br>
+                        {{ exam.exam_date.strftime('%d %b') }} 
+                        <span class="badge {% if days_left <= 7 %}bg-danger{% elif days_left <= 30 %}bg-warning{% else %}bg-info{% endif %}">{{ days_left }} days</span>
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% else %}
+                <div class="p-3 text-muted small">No upcoming exams.</div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header"><h6 class="mb-0"><i class="bi bi-currency-dollar"></i> Outstanding Balances</h6></div>
+            <div class="card-body p-0">
+                {% if outstanding_list %}
+                <div class="table-responsive">
+                    <table class="table table-sm mb-0">
+                        <thead><tr><th>Student</th><th>Form</th><th>Balance</th></tr></thead>
+                        <tbody>
+                            {% for fa in outstanding_list[:10] %}
+                            <tr>
+                                <td>{{ fa.student.full_name }}</td>
+                                <td>{{ fa.student.form }}</td>
+                                <td class="text-danger fw-bold">${{ "%.2f"|format(fa.balance) }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="p-3 text-muted">No outstanding balances.</div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h6 class="mb-0"><i class="bi bi-megaphone"></i> Announcements &amp; Activities</h6>
+                <div class="d-flex gap-2">
+                    <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#addActivityModal"><i class="bi bi-plus"></i> Add</button>
+                    <a href="{{ url_for('admin_activities') }}" class="btn btn-sm btn-outline-secondary"><i class="bi bi-gear"></i> Manage</a>
+                </div>
+            </div>
+            <div class="card-body p-0">
+                {% if recent_activity_posts %}
+                <ul class="list-group list-group-flush">
+                    {% for act in recent_activity_posts %}
+                    <li class="list-group-item py-2">
+                        <small><strong>{{ act.title }}</strong>
+                        {% if act.visibility == 'staff' %}<span class="badge bg-secondary">Staff Only</span>{% endif %}<br>
+                        <span class="text-muted">{{ act.description or '' }}</span><br>
+                        <span class="text-muted small">{{ act.created_at.strftime('%d %b %Y %H:%M') }} &middot; by {{ act.creator.first_name }} {{ act.creator.last_name }}</span></small>
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% else %}
+                <div class="p-3 text-muted">No announcements yet.</div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header"><h6 class="mb-0"><i class="bi bi-graph-up"></i> Pass Rate by Subject ({{ term }})</h6></div>
+            <div class="card-body p-0">
+                {% if pass_rates %}
+                <div class="table-responsive">
+                    <table class="table table-sm mb-0">
+                        <thead><tr><th>Subject</th><th>Pass Rate</th><th>Entries</th></tr></thead>
+                        <tbody>
+                            {% for pr in pass_rates %}
+                            <tr>
+                                <td>{{ pr.subject }}</td>
+                                <td>
+                                    <div class="progress" style="height:20px;">
+                                        <div class="progress-bar {% if pr.rate >= 50 %}bg-success{% elif pr.rate >= 30 %}bg-warning{% else %}bg-danger{% endif %}" style="width:{{ pr.rate }}%">{{ pr.rate }}%</div>
+                                    </div>
+                                </td>
+                                <td>{{ pr.total }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="p-3 text-muted">No exam data yet.</div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header"><h6 class="mb-0"><i class="bi bi-bar-chart"></i> Pass Rate by Form ({{ term }})</h6></div>
+            <div class="card-body p-0">
+                {% if form_pass_rates %}
+                <div class="table-responsive">
+                    <table class="table table-sm mb-0">
+                        <thead><tr><th>Form</th><th>Pass Rate</th><th>Entries</th></tr></thead>
+                        <tbody>
+                            {% for fpr in form_pass_rates %}
+                            <tr>
+                                <td>{{ fpr.form }}</td>
+                                <td>
+                                    <div class="progress" style="height:20px;">
+                                        <div class="progress-bar {% if fpr.rate >= 50 %}bg-success{% elif fpr.rate >= 30 %}bg-warning{% else %}bg-danger{% endif %}" style="width:{{ fpr.rate }}%">{{ fpr.rate }}%</div>
+                                    </div>
+                                </td>
+                                <td>{{ fpr.total }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="p-3 text-muted">No exam data yet.</div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header"><h6 class="mb-0"><i class="bi bi-piggy-bank"></i> Levy / Development Fund Tracking</h6></div>
+            <div class="card-body p-0">
+                {% if levies %}
+                <div class="table-responsive">
+                    <table class="table table-sm mb-0">
+                        <thead><tr><th>Fund</th><th>Target</th><th>Collected</th><th>Balance</th></tr></thead>
+                        <tbody>
+                            {% for levy in levies %}
+                            <tr>
+                                <td>{{ levy.name }}</td>
+                                <td>${{ "%.2f"|format(levy.total_amount) }}</td>
+                                <td>${{ "%.2f"|format(levy.amount_collected) }}</td>
+                                <td class="{% if levy.balance > 0 %}text-danger{% else %}text-success{% endif %}">${{ "%.2f"|format(levy.balance) }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="p-3 text-muted">No levies set for this term.</div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card h-100">
+            <div class="card-body text-center">
+                <h6 class="text-muted"><i class="bi bi-download"></i> Reports</h6>
+                <hr>
+                <a href="{{ url_for('export_zimsec_candidates') }}" class="btn btn-outline-info btn-sm w-100 mb-2"><i class="bi bi-person-check"></i> ZIMSEC Candidates</a>
+                <a href="{{ url_for('export_ministry_report') }}" class="btn btn-outline-secondary btn-sm w-100"><i class="bi bi-file-earmark-bar-graph"></i> Ministry Report</a>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card h-100">
+            <div class="card-body text-center">
+                <h6 class="text-muted"><i class="bi bi-upload"></i> Results Entry</h6>
+                <hr>
+                <p class="small text-muted">Bulk upload Excel mark sheets coming soon.</p>
+                <span class="badge bg-secondary">Term 1</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="bi bi-people-fill"></i> Students</h5>
+                <a href="{{ url_for('admin_add_student') }}" class="btn btn-sm btn-primary"><i class="bi bi-person-plus"></i> Add New</a>
+            </div>
+            <div class="card-body">
+                {% if students %}
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Student ID</th><th>Reg Number</th><th>Name</th><th>Form</th><th>Curriculum</th><th>Email</th><th>Phone</th><th>Subjects</th><th>Status</th><th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for student in students %}
+                            <tr>
+                                <td><strong>{{ student.student_id }}</strong></td>
+                                <td><small>{{ student.reg_number or '-' }}</small></td>
+                                <td>{{ student.full_name }}</td>
+                                <td>{{ student.form }}</td>
+                                <td><span class="badge bg-secondary">{{ student.curriculum or 'ZIMSEC' }}</span></td>
+                                <td><small>{{ student.email or '-' }}</small></td>
+                                <td><small>{{ student.phone or '-' }}</small></td>
+                                <td>{% for ss in student.subjects %}<span class="badge bg-primary">{{ ss.subject.name }}</span> {% endfor %}</td>
+                                <td>{% if student.is_active %}<span class="badge bg-success">Active</span>{% else %}<span class="badge bg-danger">Transferred</span>{% endif %}</td>
+                                <td>
+                                    <a href="{{ url_for('admin_edit_student', student_id=student.id) }}" class="btn btn-sm btn-outline-primary"><i class="bi bi-pencil"></i></a>
+                                    <a href="{{ url_for('admin_deactivate_student', student_id=student.id) }}" class="btn btn-sm btn-outline-{{ 'danger' if student.is_active else 'success' }}" onclick="return confirm('{{ 'Deactivate' if student.is_active else 'Reactivate' }} this student?')">
+                                        <i class="bi bi-{{ 'person-x' if student.is_active else 'person-check' }}"></i>
+                                    </a>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <p class="text-muted">No students registered yet.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="addActivityModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="POST" action="{{ url_for('admin_add_new_activity') }}">
+                <div class="modal-header">
+                    <h5 class="modal-title">New Announcement / Activity</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Title <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" name="title" placeholder="e.g. Sports Day" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Description</label>
+                        <textarea class="form-control" name="description" rows="3" placeholder="Details..."></textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Visibility</label>
+                        <select class="form-select" name="visibility">
+                            <option value="all">Everyone (Students &amp; Staff)</option>
+                            <option value="staff">Staff Members Only</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save Activity</button>
+                </div>
+            </form>
+        </div>
     </div>
 </div>
 {% endblock %}

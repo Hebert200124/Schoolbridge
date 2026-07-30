@@ -1,6 +1,6 @@
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
-from models import db, User, Student, Subject, StudentSubject, MonthlyTest, ExamMark, FeeAccount, Payment, Timetable, ExamTimetable, PrincipalComment, TeacherRemark, zim_grade
+from models import db, User, Student, Subject, StudentSubject, MonthlyTest, ExamMark, FeeAccount, Payment, FeeSetting, Timetable, ExamTimetable, PrincipalComment, TeacherRemark, ActivityLog, Activity, StaffLeave, LevyFund, zim_grade
 from config import Config
 from functools import wraps
 from datetime import datetime, date, timedelta
@@ -10,6 +10,8 @@ import string
 
 app = Flask(__name__)
 app.config.from_object(Config)
+app.jinja_env.auto_reload = True
+app.config['TEMPLATES_AUTO_RELOAD'] = True
 db.init_app(app)
 with app.app_context():
     db.create_all()
@@ -30,6 +32,14 @@ def generate_student_id():
         sid = f'{year}{num}'
         if not Student.query.filter_by(student_id=sid).first():
             return sid
+
+
+def log_activity(action, description=None, user=None, student=None, visibility='public'):
+    entry = ActivityLog(action=action, description=description, visibility=visibility,
+                        user_id=user.id if user else None,
+                        student_id=student.id if student else None)
+    db.session.add(entry)
+    db.session.commit()
 
 
 def generate_receipt():
@@ -126,6 +136,34 @@ def auth_logout():
     logout_user()
     flash('You have been logged out', 'info')
     return redirect(url_for('auth_login'))
+
+
+@app.route('/auth/change-password', methods=['GET', 'POST'])
+@login_required
+def auth_change_password():
+    if request.method == 'POST':
+        current_pw = request.form.get('current_password', '')
+        new_pw = request.form.get('new_password', '')
+        confirm_pw = request.form.get('confirm_password', '')
+
+        if not current_user.check_password(current_pw):
+            flash('Current password is incorrect.', 'danger')
+            return render_template('auth/change_password.html')
+
+        if len(new_pw) < 6:
+            flash('New password must be at least 6 characters.', 'danger')
+            return render_template('auth/change_password.html')
+
+        if new_pw != confirm_pw:
+            flash('New passwords do not match.', 'danger')
+            return render_template('auth/change_password.html')
+
+        current_user.set_password(new_pw)
+        db.session.commit()
+        flash('Password changed successfully! Please log in with your new password.', 'success')
+        return redirect(url_for('auth_logout'))
+
+    return render_template('auth/change_password.html')
 
 
 def normalize_phone(p):
@@ -276,18 +314,97 @@ def staff_dashboard():
         subj = current_user.teacher_subject
         stats['subject_name'] = subj.name if subj else 'Not assigned'
         stats['student_count'] = StudentSubject.query.filter_by(subject_id=current_user.subject_id).count() if current_user.subject_id else 0
+        stats['activities_count'] = Activity.query.count()
+        stats['recent_activity_posts'] = Activity.query.order_by(Activity.created_at.desc()).limit(10).all()
     elif current_user.role == 'cashier':
         stats['pending_clearance'] = Payment.query.filter_by(cleared=False).count()
         stats['total_payments_today'] = Payment.query.filter(db.func.date(Payment.created_at) == date.today()).count()
+        stats['recent_activity_posts'] = Activity.query.order_by(Activity.created_at.desc()).limit(10).all()
     elif current_user.role == 'admin':
         stats['total_students'] = Student.query.count()
         stats['active_students'] = Student.query.filter_by(is_active=True).count()
+        stats['staff_count'] = User.query.filter(User.role != 'principal').count()
+        term = 'Term 1'
+        stats['term'] = term
+        stats['total_expected'] = db.session.query(db.func.sum(FeeAccount.total_fees)).filter_by(term=term).scalar() or 0
+        stats['total_collected'] = db.session.query(db.func.sum(Payment.amount)).filter(Payment.cleared == True).scalar() or 0
+        fee_accounts = FeeAccount.query.filter_by(term=term).all()
+        stats['outstanding'] = sum(fa.balance for fa in fee_accounts if fa.balance > 0)
+        stats['outstanding_list'] = FeeAccount.query.filter(FeeAccount.term == term, FeeAccount.balance > 0).order_by(FeeAccount.balance.desc()).all()
+        now_date = date.today()
+        stats['upcoming_exams'] = ExamTimetable.query.filter(ExamTimetable.exam_date >= now_date).order_by(ExamTimetable.exam_date).limit(5).all()
+        stats['recent_activities'] = ActivityLog.query.order_by(ActivityLog.created_at.desc()).limit(10).all()
+        stats['recent_activity_posts'] = Activity.query.order_by(Activity.created_at.desc()).limit(10).all()
+        stats['staff_on_leave'] = StaffLeave.query.filter(StaffLeave.status == 'Approved',
+                                                           StaffLeave.end_date >= now_date).count()
+        subjects = Subject.query.all()
+        pass_rates = []
+        for subj in subjects:
+            exams = ExamMark.query.filter_by(subject_id=subj.id, term=term).all()
+            if exams:
+                passed = sum(1 for e in exams if e.marks / e.total_marks * 100 >= 50)
+                pass_rates.append({'subject': subj.name, 'rate': round(passed / len(exams) * 100, 1), 'total': len(exams)})
+        stats['pass_rates'] = pass_rates
+        form_pass_rates = []
+        forms = ['Form 1', 'Form 2', 'Form 3', 'Form 4', 'Form 5', 'Form 6']
+        for f in forms:
+            sids = [s.id for s in Student.query.filter_by(form=f).all()]
+            if sids:
+                exams = ExamMark.query.filter(ExamMark.student_id.in_(sids), ExamMark.term == term).all()
+                if exams:
+                    passed = sum(1 for e in exams if e.marks / e.total_marks * 100 >= 50)
+                    form_pass_rates.append({'form': f, 'rate': round(passed / len(exams) * 100, 1), 'total': len(exams)})
+        stats['form_pass_rates'] = form_pass_rates
+        stats['levies'] = LevyFund.query.filter_by(term=term).all()
+        staff_leaves = StaffLeave.query.filter(StaffLeave.status == 'Approved',
+                                                StaffLeave.end_date >= now_date).count()
+        stats['active_staff_count'] = stats['staff_count'] - staff_leaves
+        stats['staff_on_leave_count'] = staff_leaves
     elif current_user.role == 'principal':
-        stats['total_staff'] = User.query.count()
-        stats['total_students'] = Student.query.count()
-        stats['active_students'] = Student.query.filter_by(is_active=True).count()
+        term = 'Term 1'
+        stats['term'] = term
+        stats['total_expected'] = db.session.query(db.func.sum(FeeAccount.total_fees)).filter_by(term=term).scalar() or 0
+        stats['total_collected'] = db.session.query(db.func.sum(Payment.amount)).filter(Payment.cleared == True).scalar() or 0
+        fee_accounts = FeeAccount.query.filter_by(term=term).all()
+        stats['outstanding'] = sum(fa.balance for fa in fee_accounts if fa.balance > 0)
+        stats['outstanding_list'] = FeeAccount.query.filter(FeeAccount.term == term, FeeAccount.balance > 0).order_by(FeeAccount.balance.desc()).all()
+        active_staff = User.query.filter(User.role != 'principal', User.is_active == True).count()
+        staff_on_leave_count = StaffLeave.query.filter(StaffLeave.status == 'Approved',
+                                                        StaffLeave.end_date >= date.today()).count()
+        stats['active_staff_count'] = active_staff
+        stats['staff_on_leave_count'] = staff_on_leave_count
+        now_date = date.today()
+        stats['upcoming_exams'] = ExamTimetable.query.filter(ExamTimetable.exam_date >= now_date).order_by(ExamTimetable.exam_date).limit(5).all()
+        stats['recent_activities'] = ActivityLog.query.order_by(ActivityLog.created_at.desc()).limit(10).all()
+        stats['recent_activity_posts'] = Activity.query.order_by(Activity.created_at.desc()).limit(10).all()
+        subjects = Subject.query.all()
+        pass_rates = []
+        for subj in subjects:
+            exams = ExamMark.query.filter_by(subject_id=subj.id, term=term).all()
+            if exams:
+                passed = sum(1 for e in exams if e.marks / e.total_marks * 100 >= 50)
+                pass_rates.append({'subject': subj.name, 'rate': round(passed / len(exams) * 100, 1), 'total': len(exams)})
+        stats['pass_rates'] = pass_rates
+        form_pass_rates = []
+        forms = ['Form 1', 'Form 2', 'Form 3', 'Form 4', 'Form 5', 'Form 6']
+        for f in forms:
+            sids = [s.id for s in Student.query.filter_by(form=f).all()]
+            if sids:
+                exams = ExamMark.query.filter(ExamMark.student_id.in_(sids), ExamMark.term == term).all()
+                if exams:
+                    passed = sum(1 for e in exams if e.marks / e.total_marks * 100 >= 50)
+                    form_pass_rates.append({'form': f, 'rate': round(passed / len(exams) * 100, 1), 'total': len(exams)})
+        stats['form_pass_rates'] = form_pass_rates
+        stats['levies'] = LevyFund.query.filter_by(term=term).all()
 
     return render_template('staff/dashboard.html', stats=stats)
+
+
+@app.route('/staff/activities')
+@login_required
+def staff_activities():
+    activities = ActivityLog.query.order_by(ActivityLog.created_at.desc()).all()
+    return render_template('staff/activities.html', activities=activities)
 
 
 # ============ TEACHER ROUTES ============
@@ -303,8 +420,9 @@ def teacher_class():
     subject = Subject.query.get(current_user.subject_id)
     student_subjects = StudentSubject.query.filter_by(subject_id=current_user.subject_id).all()
     students = [ss.student for ss in student_subjects if ss.student.is_active]
+    recent_activities = ActivityLog.query.order_by(ActivityLog.created_at.desc()).limit(5).all()
 
-    return render_template('staff/teacher/class.html', subject=subject, students=students)
+    return render_template('staff/teacher/class.html', subject=subject, students=students, recent_activities=recent_activities)
 
 
 @app.route('/staff/teacher/student/<int:student_id>/results')
@@ -378,6 +496,7 @@ def teacher_add_mark():
         db.session.add(exam)
 
     db.session.commit()
+    log_activity('Marks entered', f'{mark_type} - {student.full_name}: {marks}/{total_marks}', user=current_user, student=student)
     flash(f'Marks added! Grade: {zim_grade(marks, total_marks, "A" if "6" in student.form or "5" in student.form else "O")}', 'success')
     return redirect(url_for('teacher_marks'))
 
@@ -513,6 +632,7 @@ def cashier_add_payment():
         fee_account.balance = fee_account.total_fees - fee_account.amount_paid
 
     db.session.commit()
+    log_activity('Payment recorded', f'${amount:.2f} for {student.full_name} ({student.reg_number})', user=current_user, student=student)
     flash(f'Payment recorded. Receipt: {payment.receipt_number}', 'success')
     return redirect(url_for('cashier_student_fees'))
 
@@ -565,7 +685,54 @@ def cashier_setup_fees():
 @role_required('admin')
 def admin_dashboard():
     students = Student.query.order_by(Student.created_at.desc()).all()
-    return render_template('staff/admin/dashboard.html', students=students)
+    active_students = [s for s in students if s.is_active]
+    inactive_students = [s for s in students if not s.is_active]
+
+    term = 'Term 1'
+    total_expected = db.session.query(db.func.sum(FeeAccount.total_fees)).filter_by(term=term).scalar() or 0
+    total_collected = db.session.query(db.func.sum(Payment.amount)).filter(Payment.cleared == True).scalar() or 0
+    fee_accounts = FeeAccount.query.filter_by(term=term).all()
+    outstanding = sum(fa.balance for fa in fee_accounts if fa.balance > 0)
+    outstanding_list = [fa for fa in fee_accounts if fa.balance > 0]
+
+    staff_count = User.query.filter(User.role != 'principal').count()
+
+    now_date = date.today()
+    upcoming_exams = ExamTimetable.query.filter(ExamTimetable.exam_date >= now_date).order_by(ExamTimetable.exam_date).limit(5).all()
+
+    recent_activities = ActivityLog.query.order_by(ActivityLog.created_at.desc()).limit(10).all()
+    recent_activity_posts = Activity.query.order_by(Activity.created_at.desc()).limit(10).all()
+
+    staff_leaves = StaffLeave.query.filter(StaffLeave.status == 'Approved', StaffLeave.end_date >= now_date).count()
+
+    subjects = Subject.query.all()
+    pass_rates = []
+    for subj in subjects:
+        exams = ExamMark.query.filter_by(subject_id=subj.id, term=term).all()
+        if exams:
+            passed = sum(1 for e in exams if e.marks / e.total_marks * 100 >= 50)
+            pass_rates.append({'subject': subj.name, 'rate': round(passed / len(exams) * 100, 1), 'total': len(exams)})
+
+    form_pass_rates = []
+    forms = ['Form 1', 'Form 2', 'Form 3', 'Form 4', 'Form 5', 'Form 6']
+    for f in forms:
+        student_ids = [s.id for s in Student.query.filter_by(form=f).all()]
+        if student_ids:
+            exams = ExamMark.query.filter(ExamMark.student_id.in_(student_ids), ExamMark.term == term).all()
+            if exams:
+                passed = sum(1 for e in exams if e.marks / e.total_marks * 100 >= 50)
+                form_pass_rates.append({'form': f, 'rate': round(passed / len(exams) * 100, 1), 'total': len(exams)})
+
+    levies = LevyFund.query.filter_by(term=term).all()
+
+    return render_template('staff/admin/dashboard.html', students=students, active_students=active_students,
+                           inactive_students=inactive_students, total_expected=total_expected,
+                           total_collected=total_collected, outstanding=outstanding,
+                           outstanding_list=outstanding_list, staff_count=staff_count,
+                           upcoming_exams=upcoming_exams, recent_activities=recent_activities,
+                           recent_activity_posts=recent_activity_posts,
+                           staff_leaves=staff_leaves, pass_rates=pass_rates,
+                           form_pass_rates=form_pass_rates, term=term, levies=levies)
 
 
 @app.route('/staff/admin/student/add', methods=['GET', 'POST'])
@@ -573,10 +740,13 @@ def admin_dashboard():
 @role_required('admin')
 def admin_add_student():
     subjects = Subject.query.all()
+    o_level = [s for s in subjects if s.level == 'O']
+    a_level = [s for s in subjects if s.level == 'A']
     if request.method == 'POST':
         first_name = request.form.get('first_name')
         last_name = request.form.get('last_name')
         form = request.form.get('form')
+        curriculum = request.form.get('curriculum')
         email = request.form.get('email')
         phone = request.form.get('phone')
         password = request.form.get('password')
@@ -587,7 +757,7 @@ def admin_add_student():
 
         student = Student(
             student_id=student_id, first_name=first_name, last_name=last_name,
-            form=form, email=email or None, phone=phone, reg_number=reg_number
+            form=form, curriculum=curriculum, email=email or None, phone=phone, reg_number=reg_number
         )
         student.set_password(password or 'student123')
 
@@ -599,10 +769,11 @@ def admin_add_student():
             db.session.add(ss)
 
         db.session.commit()
+        log_activity('New student registered', f'{first_name} {last_name} ({reg_number})', user=current_user)
         flash(f'Student {first_name} {last_name} added. ID: {student_id}, Reg: {reg_number}', 'success')
         return redirect(url_for('admin_dashboard'))
 
-    return render_template('staff/admin/add_student.html', subjects=subjects)
+    return render_template('staff/admin/add_student.html', subjects=subjects, o_level=o_level, a_level=a_level)
 
 
 @app.route('/staff/admin/student/edit/<int:student_id>', methods=['GET', 'POST'])
@@ -612,11 +783,14 @@ def admin_edit_student(student_id):
     student = Student.query.get_or_404(student_id)
     subjects = Subject.query.all()
     enrolled_ids = [ss.subject_id for ss in student.subjects]
+    o_level = [s for s in subjects if s.level == 'O']
+    a_level = [s for s in subjects if s.level == 'A']
 
     if request.method == 'POST':
         student.first_name = request.form.get('first_name')
         student.last_name = request.form.get('last_name')
         student.form = request.form.get('form')
+        student.curriculum = request.form.get('curriculum')
         student.email = request.form.get('email') or None
         student.phone = request.form.get('phone')
         if request.form.get('password'):
@@ -631,7 +805,7 @@ def admin_edit_student(student_id):
         flash('Student updated.', 'success')
         return redirect(url_for('admin_dashboard'))
 
-    return render_template('staff/admin/edit_student.html', student=student, subjects=subjects, enrolled_ids=enrolled_ids)
+    return render_template('staff/admin/edit_student.html', student=student, subjects=subjects, enrolled_ids=enrolled_ids, o_level=o_level, a_level=a_level)
 
 
 @app.route('/staff/admin/student/deactivate/<int:student_id>')
@@ -644,6 +818,90 @@ def admin_deactivate_student(student_id):
     db.session.commit()
     flash(f'Student {student.full_name} {status}.', 'info')
     return redirect(url_for('admin_dashboard'))
+
+
+@app.route('/staff/admin/student/<int:student_id>/remove-subjects', methods=['POST'])
+@login_required
+@role_required('admin')
+def admin_remove_student_subjects(student_id):
+    student = Student.query.get_or_404(student_id)
+    count = StudentSubject.query.filter_by(student_id=student.id).count()
+    StudentSubject.query.filter_by(student_id=student.id).delete()
+    db.session.commit()
+    log_activity('Student removed from all subjects', f'{student.full_name} ({count} subjects)', user=current_user)
+    flash(f'Removed {student.full_name} from all {count} subject(s).', 'success')
+    return redirect(url_for('admin_edit_student', student_id=student.id))
+
+
+@app.route('/staff/admin/activity/add', methods=['POST'])
+@login_required
+@role_required('admin')
+def admin_add_activity():
+    action = request.form.get('action')
+    description = request.form.get('description')
+    visibility = request.form.get('visibility', 'public')
+    if action:
+        log_activity(action, description, user=current_user, visibility=visibility)
+        flash('Activity logged.', 'success')
+    return redirect(url_for('admin_dashboard'))
+
+
+@app.route('/staff/admin/activities')
+@login_required
+@role_required('admin')
+def admin_activities():
+    activities_list = Activity.query.order_by(Activity.created_at.desc()).all()
+    return render_template('staff/admin/activities.html', activities_list=activities_list)
+
+
+@app.route('/staff/admin/activities/add', methods=['GET', 'POST'])
+@login_required
+@role_required('admin')
+def admin_add_new_activity():
+    if request.method == 'POST':
+        title = request.form.get('title')
+        description = request.form.get('description')
+        visibility = request.form.get('visibility', 'all')
+        if title:
+            activity = Activity(title=title, description=description,
+                                visibility=visibility, created_by=current_user.id)
+            db.session.add(activity)
+            db.session.commit()
+            flash('Activity created.', 'success')
+            return redirect(url_for('admin_activities'))
+        flash('Title is required.', 'danger')
+    return render_template('staff/admin/add_activity.html')
+
+
+@app.route('/staff/admin/activities/edit/<int:id>', methods=['GET', 'POST'])
+@login_required
+@role_required('admin')
+def admin_edit_activity(id):
+    activity = Activity.query.get_or_404(id)
+    if request.method == 'POST':
+        title = request.form.get('title')
+        description = request.form.get('description')
+        visibility = request.form.get('visibility', 'all')
+        if title:
+            activity.title = title
+            activity.description = description
+            activity.visibility = visibility
+            db.session.commit()
+            flash('Activity updated.', 'success')
+            return redirect(url_for('admin_activities'))
+        flash('Title is required.', 'danger')
+    return render_template('staff/admin/edit_activity.html', activity=activity)
+
+
+@app.route('/staff/admin/activities/delete/<int:id>', methods=['POST'])
+@login_required
+@role_required('admin')
+def admin_delete_activity(id):
+    activity = Activity.query.get_or_404(id)
+    db.session.delete(activity)
+    db.session.commit()
+    flash('Activity deleted.', 'success')
+    return redirect(url_for('admin_activities'))
 
 
 # ============ PRINCIPAL ROUTES ============
@@ -660,7 +918,53 @@ def principal_dashboard():
         payments = Payment.query.filter_by(student_id=s.id).order_by(Payment.created_at.desc()).all()
         total_paid = sum(p.amount for p in payments)
         student_fees[s.id] = {'fee': fee, 'payments': payments, 'total_paid': total_paid}
-    return render_template('staff/principal/dashboard.html', staff=staff, students=students, student_fees=student_fees)
+
+    term = 'Term 1'
+    total_expected = db.session.query(db.func.sum(FeeAccount.total_fees)).filter_by(term=term).scalar() or 0
+    total_collected = db.session.query(db.func.sum(Payment.amount)).filter(Payment.cleared == True).scalar() or 0
+    fee_accounts = FeeAccount.query.filter_by(term=term).all()
+    outstanding = sum(fa.balance for fa in fee_accounts if fa.balance > 0)
+    outstanding_list = [fa for fa in fee_accounts if fa.balance > 0]
+
+    active_staff_count = User.query.filter(User.role != 'principal', User.is_active == True).count()
+    staff_on_leave = StaffLeave.query.filter(StaffLeave.status == 'Approved',
+                                              StaffLeave.end_date >= date.today()).count()
+
+    now_date = date.today()
+    upcoming_exams = ExamTimetable.query.filter(ExamTimetable.exam_date >= now_date).order_by(ExamTimetable.exam_date).limit(5).all()
+
+    recent_activities = ActivityLog.query.order_by(ActivityLog.created_at.desc()).limit(10).all()
+    recent_activity_posts = Activity.query.order_by(Activity.created_at.desc()).limit(10).all()
+
+    subjects = Subject.query.all()
+    pass_rates = []
+    for subj in subjects:
+        exams = ExamMark.query.filter_by(subject_id=subj.id, term=term).all()
+        if exams:
+            passed = sum(1 for e in exams if e.marks / e.total_marks * 100 >= 50)
+            pass_rates.append({'subject': subj.name, 'rate': round(passed / len(exams) * 100, 1), 'total': len(exams)})
+
+    form_pass_rates = []
+    forms = ['Form 1', 'Form 2', 'Form 3', 'Form 4', 'Form 5', 'Form 6']
+    for f in forms:
+        sids = [s.id for s in Student.query.filter_by(form=f).all()]
+        if sids:
+            exams = ExamMark.query.filter(ExamMark.student_id.in_(sids), ExamMark.term == term).all()
+            if exams:
+                passed = sum(1 for e in exams if e.marks / e.total_marks * 100 >= 50)
+                form_pass_rates.append({'form': f, 'rate': round(passed / len(exams) * 100, 1), 'total': len(exams)})
+
+    levies = LevyFund.query.filter_by(term=term).all()
+    zimsec_students = Student.query.filter_by(curriculum='ZIMSEC', is_active=True).count()
+
+    return render_template('staff/principal/dashboard.html', staff=staff, students=students,
+                           student_fees=student_fees, total_expected=total_expected,
+                           total_collected=total_collected, outstanding=outstanding,
+                           outstanding_list=outstanding_list, active_staff_count=active_staff_count,
+                           staff_on_leave=staff_on_leave, upcoming_exams=upcoming_exams,
+                           recent_activities=recent_activities, recent_activity_posts=recent_activity_posts,
+                           pass_rates=pass_rates, form_pass_rates=form_pass_rates, term=term, levies=levies,
+                           zimsec_students=zimsec_students)
 
 
 @app.route('/staff/principal/student/<int:student_id>/results')
@@ -777,15 +1081,15 @@ def principal_fire_staff(staff_id):
     return redirect(url_for('principal_dashboard'))
 
 
-@app.route('/staff/principal/student/dismiss/<int:student_id>')
+@app.route('/staff/principal/student/toggle-status/<int:student_id>')
 @login_required
 @role_required('principal')
-def principal_dismiss_student(student_id):
+def principal_toggle_student_status(student_id):
     student = Student.query.get_or_404(student_id)
-    full_name = student.full_name
-    db.session.delete(student)
+    student.is_active = not student.is_active
+    status = 'reactivated' if student.is_active else 'deactivated'
     db.session.commit()
-    flash(f'Student {full_name} dismissed from the school.', 'warning')
+    flash(f'Student {student.full_name} has been {status}.', 'warning')
     return redirect(url_for('principal_dashboard'))
 
 
@@ -852,6 +1156,111 @@ def principal_delete_exam_timetable(ett_id):
     return redirect(url_for('principal_timetables'))
 
 
+@app.route('/staff/principal/fee-settings', methods=['GET', 'POST'])
+@login_required
+@role_required('principal')
+def principal_fee_settings():
+    if request.method == 'POST':
+        form = request.form.get('form', '').strip()
+        term_fee = float(request.form.get('term_fee', 0))
+        if form and term_fee > 0:
+            existing = FeeSetting.query.filter_by(form=form).first()
+            if existing:
+                existing.term_fee = term_fee
+            else:
+                db.session.add(FeeSetting(form=form, term_fee=term_fee))
+            db.session.commit()
+            flash(f'Fee for {form} set to ${term_fee:.2f}.', 'success')
+        return redirect(url_for('principal_fee_settings'))
+
+    fee_settings = FeeSetting.query.order_by(FeeSetting.form).all()
+    forms = ['Form 1', 'Form 2', 'Form 3', 'Form 4', 'Form 5', 'Form 6']
+    return render_template('staff/principal/fee_settings.html', fee_settings=fee_settings, forms=forms)
+
+
+@app.route('/staff/principal/fee-settings/delete/<int:fs_id>')
+@login_required
+@role_required('principal')
+def principal_delete_fee_setting(fs_id):
+    fs = FeeSetting.query.get_or_404(fs_id)
+    db.session.delete(fs)
+    db.session.commit()
+    flash('Fee setting removed.', 'success')
+    return redirect(url_for('principal_fee_settings'))
+
+
+@app.route('/staff/principal/student/<int:student_id>/edit-fees', methods=['GET', 'POST'])
+@login_required
+@role_required('principal')
+def principal_edit_student_fees(student_id):
+    student = Student.query.get_or_404(student_id)
+    fee_account = FeeAccount.query.filter_by(student_id=student.id).first()
+
+    if request.method == 'POST':
+        total_fees = float(request.form.get('total_fees', 0))
+        amount_paid = float(request.form.get('amount_paid', 0))
+        if not fee_account:
+            fee_account = FeeAccount(student_id=student.id, term='Term 1')
+            db.session.add(fee_account)
+        fee_account.total_fees = total_fees
+        fee_account.amount_paid = amount_paid
+        fee_account.balance = total_fees - amount_paid
+        db.session.commit()
+        flash(f'Fees updated for {student.full_name}.', 'success')
+        return redirect(url_for('principal_dashboard'))
+
+    return render_template('staff/principal/edit_fees.html', student=student, fee_account=fee_account)
+
+
+# ============ EXPORT ROUTES ============
+
+@app.route('/staff/principal/export/zimsec-candidates')
+@login_required
+@role_required('principal')
+def export_zimsec_candidates():
+    students = Student.query.filter_by(curriculum='ZIMSEC', is_active=True).order_by(Student.form, Student.last_name).all()
+    import csv, io
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(['Student ID', 'Reg Number', 'Full Name', 'Form', 'Subjects', 'Gender'])
+    for s in students:
+        subs = ', '.join(ss.subject.name for ss in s.subjects)
+        writer.writerow([s.student_id, s.reg_number, s.full_name, s.form, subs, ''])
+    response = app.response_class(output.getvalue(), mimetype='text/csv',
+                                  headers={'Content-Disposition': 'attachment; filename=zimsec_candidates.csv'})
+    log_activity('Exported ZIMSEC candidate list', user=current_user)
+    return response
+
+
+@app.route('/staff/principal/export/ministry-report')
+@login_required
+@role_required('principal')
+def export_ministry_report():
+    term = 'Term 1'
+    import csv, io
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(['Form', 'Total Students', 'Total Passed', 'Pass Rate', 'Total Expected Fees', 'Total Collected', 'Outstanding'])
+    forms = ['Form 1', 'Form 2', 'Form 3', 'Form 4', 'Form 5', 'Form 6']
+    for f in forms:
+        sids = [s.id for s in Student.query.filter_by(form=f).all()]
+        total = len(sids)
+        passed = 0
+        if sids:
+            exams = ExamMark.query.filter(ExamMark.student_id.in_(sids), ExamMark.term == term).all()
+            if exams:
+                passed = sum(1 for e in exams if e.marks / e.total_marks * 100 >= 50)
+        fee_total = db.session.query(db.func.sum(FeeAccount.total_fees)).filter(FeeAccount.term == term).scalar() or 0
+        fee_collected = db.session.query(db.func.sum(Payment.amount)).filter(Payment.cleared == True).scalar() or 0
+        outstanding_fees = fee_total - fee_collected
+        pass_rate = round(passed / total * 100, 1) if total > 0 else 0
+        writer.writerow([f, total, passed, f'{pass_rate}%', f'${fee_total:.2f}', f'${fee_collected:.2f}', f'${outstanding_fees:.2f}'])
+    response = app.response_class(output.getvalue(), mimetype='text/csv',
+                                  headers={'Content-Disposition': 'attachment; filename=ministry_report.csv'})
+    log_activity('Exported Ministry report', user=current_user)
+    return response
+
+
 # ============ STUDENT ROUTES ============
 
 @app.route('/student/dashboard')
@@ -874,11 +1283,12 @@ def student_dashboard():
 
     # Get teacher remarks for this student
     teacher_remarks = TeacherRemark.query.filter_by(student_id=current_user.id).order_by(TeacherRemark.created_at.desc()).all()
+    recent_activity_posts = Activity.query.filter_by(visibility='all').order_by(Activity.created_at.desc()).limit(10).all()
 
     return render_template('student/dashboard.html', subjects=subjects, monthly_tests=monthly_tests,
                          exam_marks=exam_marks_list, fee_account=fee_account, payments=payments,
                          timetables=timetables, exam_timetables=exam_timetables, subject_teachers=subject_teachers,
-                         teacher_remarks=teacher_remarks)
+                         teacher_remarks=teacher_remarks, recent_activity_posts=recent_activity_posts)
 
 
 @app.route('/student/results')
@@ -965,7 +1375,7 @@ def student_subjects():
 
 @app.route('/setup')
 def setup():
-    if os.environ.get('ENABLE_SETUP', '').lower() != 'true':
+    if Subject.query.first() is not None and os.environ.get('ENABLE_SETUP', '').lower() != 'true':
         return 'Setup is disabled.', 403
     db.drop_all()
     db.create_all()
@@ -982,7 +1392,9 @@ def setup():
         ('Portuguese', 'PORT', 'O'), ('Music', 'MUS', 'O'), ('Art', 'ART', 'O'),
     ]
     al = [
-        ('Mathematics', 'MATH-A', 'A'), ('English Literature', 'ELIT-A', 'A'), ('Shona', 'SHO-A', 'A'),
+        ('Pure Mathematics', 'MATH-PURE', 'A'), ('Statistics', 'MATH-STAT', 'A'),
+        ('Mechanics', 'MATH-MECH', 'A'), ('Further Mathematics', 'MATH-FURTHER', 'A'),
+        ('English Literature', 'ELIT-A', 'A'), ('Shona', 'SHO-A', 'A'),
         ('Ndebele', 'NDEB-A', 'A'), ('Biology', 'BIO-A', 'A'), ('Chemistry', 'CHEM-A', 'A'),
         ('Physics', 'PHY-A', 'A'), ('History', 'HIST-A', 'A'), ('Geography', 'GEOG-A', 'A'),
         ('Accounts', 'ACCT-A', 'A'), ('Economics', 'ECON-A', 'A'), ('Business Studies', 'BS-A', 'A'),
@@ -994,6 +1406,11 @@ def setup():
 
     for name, code, level in ol + al:
         db.session.add(Subject(name=name, code=code, level=level))
+    db.session.commit()
+
+    default_fees = [('Form 1', 350), ('Form 2', 350), ('Form 3', 400), ('Form 4', 500), ('Form 5', 450), ('Form 6', 600)]
+    for form, fee in default_fees:
+        db.session.add(FeeSetting(form=form, term_fee=fee))
     db.session.commit()
 
     principal = User(username='principal', email='principal@schoolbridge.zw', role='principal',
@@ -1040,12 +1457,14 @@ def setup():
         ('2026003', 'Tafadzwa', 'Sithole', 'Form 3', [math_s, sci_s, geo_s, hist_s], '+263 712 000 003'),
         ('2026004', 'Rutendo', 'Gumbo', 'Form 3', [eng_s, sci_s, bio_s], '+263 712 000 004'),
         ('2026005', 'Kudzai', 'Zhou', 'Form 4', [math_s, eng_s, sci_s, bio_s, hist_s, geo_s], '+263 712 000 005'),
-        ('2026006', 'Tanaka', 'Chigumba', 'Form 6', [Subject.query.filter_by(code='MATH-A').first(), Subject.query.filter_by(code='BIO-A').first(), Subject.query.filter_by(code='CHEM-A').first()], '+263 712 000 006'),
+        ('2026006', 'Tanaka', 'Chigumba', 'Form 6', [Subject.query.filter_by(code='MATH-PURE').first(), Subject.query.filter_by(code='BIO-A').first(), Subject.query.filter_by(code='CHEM-A').first()], '+263 712 000 006'),
     ]
 
     for sid, fn, ln, form, subjs, phone in sample_data:
         reg = f'REG-{sid}'
+        curriculum = 'Cambridge' if form in ('Form 5', 'Form 6') else 'ZIMSEC'
         student = Student(student_id=sid, first_name=fn, last_name=ln, form=form,
+                         curriculum=curriculum,
                          email=f'{fn.lower()}.{ln.lower()}@student.schoolbridge.zw',
                          reg_number=reg, phone=phone)
         student.set_password('student123')

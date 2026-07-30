@@ -33,6 +33,7 @@
                 <hr>
                 {% if fee_account %}
                 <h6>Fee Account - {{ fee_account.term }}</h6>
+                <div class="table-responsive">
                 <table class="table table-bordered">
                     <tr><th>Total Fees</th><td>${{ "%.2f"|format(fee_account.total_fees) }}</td></tr>
                     <tr><th>Amount Paid</th><td class="text-success fw-bold">${{ "%.2f"|format(fee_account.amount_paid) }}</td></tr>
@@ -44,6 +45,7 @@
                         {% endif %}</td>
                     </tr>
                 </table>
+                </div>
                 {% else %}
                 <p class="text-muted">No fee account set up.</p>
                 {% endif %}

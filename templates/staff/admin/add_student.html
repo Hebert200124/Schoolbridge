@@ -20,10 +20,18 @@
                     <div class="row">
                         <div class="col-md-4 mb-3">
                             <label class="form-label">Form</label>
-                            <select class="form-select" name="form" required>
+                            <select class="form-select" name="form" id="formSelect" required>
+                                <option value="">Select form...</option>
                                 {% for f in ['Form 1', 'Form 2', 'Form 3', 'Form 4', 'Form 5', 'Form 6'] %}
                                 <option value="{{ f }}">{{ f }}</option>
                                 {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">Curriculum</label>
+                            <select class="form-select" name="curriculum" required>
+                                <option value="ZIMSEC">ZIMSEC</option>
+                                <option value="Cambridge">Cambridge</option>
                             </select>
                         </div>
                         <div class="col-md-4 mb-3">
@@ -36,17 +44,30 @@
                         </div>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label">Subjects</label>
-                        <div class="row">
-                            {% for subject in subjects %}
+                        <label class="form-label">Subjects <small class="text-muted">(shown based on selected form)</small></label>
+                        <div class="row" id="oLevelSubjects" style="display:none;">
+                            <div class="col-12 mb-2"><strong>O-Level Subjects</strong></div>
+                            {% for subject in o_level %}
                             <div class="col-md-3">
                                 <div class="form-check">
-                                    <input class="form-check-input" type="checkbox" name="subjects" value="{{ subject.id }}" id="subj{{ subject.id }}">
-                                    <label class="form-check-label" for="subj{{ subject.id }}">{{ subject.name }} <small class="text-muted">({{ subject.level }})</small></label>
+                                    <input class="form-check-input subject-cb" type="checkbox" name="subjects" value="{{ subject.id }}" id="subj{{ subject.id }}" data-level="O">
+                                    <label class="form-check-label" for="subj{{ subject.id }}">{{ subject.name }}</label>
                                 </div>
                             </div>
                             {% endfor %}
                         </div>
+                        <div class="row" id="aLevelSubjects" style="display:none;">
+                            <div class="col-12 mb-2"><strong>A-Level Subjects</strong></div>
+                            {% for subject in a_level %}
+                            <div class="col-md-3">
+                                <div class="form-check">
+                                    <input class="form-check-input subject-cb" type="checkbox" name="subjects" value="{{ subject.id }}" id="subj{{ subject.id }}" data-level="A">
+                                    <label class="form-check-label" for="subj{{ subject.id }}">{{ subject.name }}</label>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        <div id="noFormMsg" class="text-muted"><em>Select a form above to see available subjects.</em></div>
                     </div>
                     <div class="row">
                         <div class="col-md-6 mb-3">
@@ -60,4 +81,14 @@
         </div>
     </div>
 </div>
+
+<script>
+document.getElementById('formSelect').addEventListener('change', function() {
+    var val = this.value;
+    var formNum = parseInt(val.replace('Form ', ''));
+    document.getElementById('oLevelSubjects').style.display = (formNum >= 1 && formNum <= 4) ? '' : 'none';
+    document.getElementById('aLevelSubjects').style.display = (formNum >= 5) ? '' : 'none';
+    document.getElementById('noFormMsg').style.display = val ? 'none' : '';
+});
+</script>
 {% endblock %}

@@ -7,7 +7,7 @@
 
 <div class="row">
     {% if current_user.role == 'teacher' %}
-    <div class="col-md-4">
+    <div class="col-md-3">
         <div class="card stat-card bg-primary text-white">
             <div class="card-body">
                 <div class="stat-icon"><i class="bi bi-book"></i></div>
@@ -16,16 +16,18 @@
             </div>
         </div>
     </div>
-    <div class="col-md-4">
+    <div class="col-md-3">
+        <a href="{{ url_for('teacher_marks') }}" class="text-decoration-none">
         <div class="card stat-card bg-success text-white">
             <div class="card-body">
-                <div class="stat-icon"><i class="bi bi-people"></i></div>
-                <p class="stat-number">{{ stats.student_count }}</p>
-                <p class="stat-label">Students</p>
+                <div class="stat-icon"><i class="bi bi-pencil-square"></i></div>
+                <p class="stat-number">Marks Entry</p>
+                <p class="stat-label">Record Monthly Tests & Exams</p>
             </div>
         </div>
+        </a>
     </div>
-    <div class="col-md-4">
+    <div class="col-md-3">
         <div class="card stat-card bg-info text-white">
             <div class="card-body">
                 <div class="stat-icon"><i class="bi bi-people-fill"></i></div>
@@ -33,6 +35,17 @@
                 <p class="stat-label">My Students</p>
             </div>
         </div>
+    </div>
+    <div class="col-md-3">
+        <a href="{{ url_for('staff_activities') }}" class="text-decoration-none">
+        <div class="card stat-card bg-warning text-white">
+            <div class="card-body">
+                <div class="stat-icon"><i class="bi bi-list-check"></i></div>
+                <p class="stat-number">{{ stats.activities_count }}</p>
+                <p class="stat-label">Activities</p>
+            </div>
+        </div>
+        </a>
     </div>
 
     {% elif current_user.role == 'cashier' %}
@@ -66,6 +79,7 @@
 
     {% elif current_user.role == 'admin' %}
     <div class="col-md-4">
+        <a href="{{ url_for('admin_dashboard') }}" class="text-decoration-none">
         <div class="card stat-card bg-primary text-white">
             <div class="card-body">
                 <div class="stat-icon"><i class="bi bi-people-fill"></i></div>
@@ -73,8 +87,10 @@
                 <p class="stat-label">Total Students</p>
             </div>
         </div>
+        </a>
     </div>
     <div class="col-md-4">
+        <a href="{{ url_for('admin_dashboard') }}" class="text-decoration-none">
         <div class="card stat-card bg-success text-white">
             <div class="card-body">
                 <div class="stat-icon"><i class="bi bi-person-check"></i></div>
@@ -82,19 +98,23 @@
                 <p class="stat-label">Active Students</p>
             </div>
         </div>
+        </a>
     </div>
     <div class="col-md-4">
+        <a href="{{ url_for('admin_add_student') }}" class="text-decoration-none">
         <div class="card stat-card bg-info text-white">
             <div class="card-body">
                 <div class="stat-icon"><i class="bi bi-person-plus"></i></div>
-                <p class="stat-number"><a href="{{ url_for('admin_add_student') }}" class="text-white">Add New</a></p>
+                <p class="stat-number">Add New</p>
                 <p class="stat-label">Register Student</p>
             </div>
         </div>
+        </a>
     </div>
 
     {% elif current_user.role == 'principal' %}
     <div class="col-md-3">
+        <a href="{{ url_for('principal_dashboard') }}#staff" class="text-decoration-none">
         <div class="card stat-card bg-primary text-white">
             <div class="card-body">
                 <div class="stat-icon"><i class="bi bi-people"></i></div>
@@ -102,8 +122,10 @@
                 <p class="stat-label">Staff Members</p>
             </div>
         </div>
+        </a>
     </div>
     <div class="col-md-3">
+        <a href="{{ url_for('principal_dashboard') }}#students" class="text-decoration-none">
         <div class="card stat-card bg-success text-white">
             <div class="card-body">
                 <div class="stat-icon"><i class="bi bi-mortarboard"></i></div>
@@ -111,8 +133,10 @@
                 <p class="stat-label">Total Students</p>
             </div>
         </div>
+        </a>
     </div>
     <div class="col-md-3">
+        <a href="{{ url_for('principal_dashboard') }}#students" class="text-decoration-none">
         <div class="card stat-card bg-info text-white">
             <div class="card-body">
                 <div class="stat-icon"><i class="bi bi-person-check"></i></div>
@@ -120,18 +144,247 @@
                 <p class="stat-label">Active Students</p>
             </div>
         </div>
+        </a>
     </div>
     <div class="col-md-3">
-        <div class="card stat-card bg-coral text-white">
+        <a href="{{ url_for('principal_timetables') }}" class="text-decoration-none">
+        <div class="card stat-card bg-warning text-white">
             <div class="card-body">
                 <div class="stat-icon"><i class="bi bi-calendar-week"></i></div>
-                <p class="stat-number"><a href="{{ url_for('principal_timetables') }}" class="text-white">Timetables</a></p>
+                <p class="stat-number">Timetables</p>
                 <p class="stat-label">Manage</p>
+            </div>
+        </div>
+        </a>
+    </div>
+    {% endif %}
+</div>
+
+{% if current_user.role in ('principal', 'admin') %}
+
+<div class="row g-3 mb-4">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header"><h6 class="mb-0"><i class="bi bi-currency-dollar"></i> Fee Collection Summary — {{ stats.term }}</h6></div>
+            <div class="card-body">
+                <div class="row text-center g-2">
+                    <div class="col-4">
+                        <h5 class="text-primary mb-0">${{ "%.2f"|format(stats.total_expected) }}</h5>
+                        <small class="text-muted">Expected</small>
+                    </div>
+                    <div class="col-4">
+                        <h5 class="text-success mb-0">${{ "%.2f"|format(stats.total_collected) }}</h5>
+                        <small class="text-muted">Collected</small>
+                    </div>
+                    <div class="col-4">
+                        <h5 class="text-danger mb-0">${{ "%.2f"|format(stats.outstanding) }}</h5>
+                        <small class="text-muted">Outstanding</small>
+                    </div>
+                </div>
+                {% set pct = (stats.total_collected / stats.total_expected * 100) if stats.total_expected > 0 else 0 %}
+                <div class="progress mt-2" style="height:10px;">
+                    <div class="progress-bar bg-success" style="width:{{ pct }}%">{{ "%.1f"|format(pct) }}%</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card">
+            <div class="card-header"><h6 class="mb-0"><i class="bi bi-person-badge"></i> Staff & Attendance</h6></div>
+            <div class="card-body text-center">
+                <h3>{{ stats.total_staff }}</h3>
+                <p class="mb-0">Total Staff</p>
+                <span class="badge bg-warning">{{ stats.staff_on_leave }} on leave</span>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card">
+            <div class="card-header"><h6 class="mb-0"><i class="bi bi-clock"></i> Upcoming Exams</h6></div>
+            <div class="card-body p-0">
+                {% if stats.upcoming_exams %}
+                <ul class="list-group list-group-flush">
+                    {% for exam in stats.upcoming_exams[:3] %}
+                    {% set days_left = (exam.exam_date - now().date()).days %}
+                    <li class="list-group-item py-2 small">
+                        <strong>{{ exam.subject_rel.name }}</strong><br>
+                        {{ exam.exam_date.strftime('%d %b') }}
+                        <span class="badge {% if days_left <= 7 %}bg-danger{% elif days_left <= 30 %}bg-warning{% else %}bg-info{% endif %}">{{ days_left }} days</span>
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% else %}
+                <div class="p-3 text-muted small">No upcoming exams.</div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header"><h6 class="mb-0"><i class="bi bi-currency-dollar"></i> Outstanding Balances</h6></div>
+            <div class="card-body p-0">
+                {% if stats.outstanding_list %}
+                <div class="table-responsive">
+                    <table class="table table-sm mb-0">
+                        <thead class="table-dark"><tr><th>Student</th><th>Form</th><th>Balance</th></tr></thead>
+                        <tbody>
+                            {% for fa in stats.outstanding_list[:10] %}
+                            <tr>
+                                <td>{{ fa.student.full_name }}</td>
+                                <td>{{ fa.student.form }}</td>
+                                <td class="text-danger fw-bold">${{ "%.2f"|format(fa.balance) }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="p-3 text-muted">No outstanding balances.</div>
+                {% endif %}
             </div>
         </div>
     </div>
     {% endif %}
+
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header"><h6 class="mb-0"><i class="bi bi-megaphone"></i> Announcements &amp; Activities</h6></div>
+            <div class="card-body p-0">
+                {% if stats.recent_activity_posts %}
+                <ul class="list-group list-group-flush">
+                    {% for act in stats.recent_activity_posts %}
+                    <li class="list-group-item py-2">
+                        <small><strong>{{ act.title }}</strong>
+                        {% if act.visibility == 'staff' %}<span class="badge bg-secondary">Staff Only</span>{% endif %}<br>
+                        <span class="text-muted">{{ act.description or '' }}</span><br>
+                        <span class="text-muted small">{{ act.created_at.strftime('%d %b %Y %H:%M') }} &middot; by {{ act.creator.first_name }} {{ act.creator.last_name }}</span></small>
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% else %}
+                <div class="p-3 text-muted">No announcements yet.</div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
 </div>
+
+{% if current_user.role in ('principal', 'admin') %}
+
+<div class="row g-3 mb-4">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header"><h6 class="mb-0"><i class="bi bi-graph-up"></i> Pass Rate by Subject ({{ stats.term }})</h6></div>
+            <div class="card-body p-0">
+                {% if stats.pass_rates %}
+                <div class="table-responsive">
+                    <table class="table table-sm mb-0">
+                        <thead><tr><th>Subject</th><th>Pass Rate</th><th>Entries</th></tr></thead>
+                        <tbody>
+                            {% for pr in stats.pass_rates %}
+                            <tr>
+                                <td>{{ pr.subject }}</td>
+                                <td>
+                                    <div class="progress" style="height:20px;">
+                                        <div class="progress-bar {% if pr.rate >= 50 %}bg-success{% elif pr.rate >= 30 %}bg-warning{% else %}bg-danger{% endif %}" style="width:{{ pr.rate }}%">{{ pr.rate }}%</div>
+                                    </div>
+                                </td>
+                                <td>{{ pr.total }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="p-3 text-muted">No exam data yet.</div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header"><h6 class="mb-0"><i class="bi bi-bar-chart"></i> Pass Rate by Form ({{ stats.term }})</h6></div>
+            <div class="card-body p-0">
+                {% if stats.form_pass_rates %}
+                <div class="table-responsive">
+                    <table class="table table-sm mb-0">
+                        <thead><tr><th>Form</th><th>Pass Rate</th><th>Entries</th></tr></thead>
+                        <tbody>
+                            {% for fpr in stats.form_pass_rates %}
+                            <tr>
+                                <td>{{ fpr.form }}</td>
+                                <td>
+                                    <div class="progress" style="height:20px;">
+                                        <div class="progress-bar {% if fpr.rate >= 50 %}bg-success{% elif fpr.rate >= 30 %}bg-warning{% else %}bg-danger{% endif %}" style="width:{{ fpr.rate }}%">{{ fpr.rate }}%</div>
+                                    </div>
+                                </td>
+                                <td>{{ fpr.total }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="p-3 text-muted">No exam data yet.</div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header"><h6 class="mb-0"><i class="bi bi-piggy-bank"></i> Levy / Development Fund Tracking</h6></div>
+            <div class="card-body p-0">
+                {% if stats.levies %}
+                <div class="table-responsive">
+                    <table class="table table-sm mb-0">
+                        <thead><tr><th>Fund</th><th>Target</th><th>Collected</th><th>Balance</th></tr></thead>
+                        <tbody>
+                            {% for levy in stats.levies %}
+                            <tr>
+                                <td>{{ levy.name }}</td>
+                                <td>${{ "%.2f"|format(levy.total_amount) }}</td>
+                                <td>${{ "%.2f"|format(levy.amount_collected) }}</td>
+                                <td class="{% if levy.balance > 0 %}text-danger{% else %}text-success{% endif %}">${{ "%.2f"|format(levy.balance) }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="p-3 text-muted">No levies set for this term.</div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card h-100">
+            <div class="card-body text-center">
+                <h6 class="text-muted"><i class="bi bi-download"></i> Reports</h6>
+                <hr>
+                <a href="{{ url_for('export_zimsec_candidates') }}" class="btn btn-outline-info btn-sm w-100 mb-2"><i class="bi bi-person-check"></i> ZIMSEC Candidates</a>
+                <a href="{{ url_for('export_ministry_report') }}" class="btn btn-outline-secondary btn-sm w-100"><i class="bi bi-file-earmark-bar-graph"></i> Ministry Report</a>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card h-100">
+            <div class="card-body text-center">
+                <h6 class="text-muted"><i class="bi bi-upload"></i> Results Entry</h6>
+                <hr>
+                <p class="small text-muted">Bulk upload Excel mark sheets coming soon.</p>
+                <span class="badge bg-secondary">{{ stats.term }}</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endif %}
 
 <div class="card mt-3">
     <div class="card-header">

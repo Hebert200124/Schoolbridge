@@ -20,10 +20,17 @@
                     <div class="row">
                         <div class="col-md-4 mb-3">
                             <label class="form-label">Form</label>
-                            <select class="form-select" name="form" required>
+                            <select class="form-select" name="form" id="formSelect" required>
                                 {% for f in ['Form 1', 'Form 2', 'Form 3', 'Form 4', 'Form 5', 'Form 6'] %}
                                 <option value="{{ f }}" {{ 'selected' if student.form == f }}>{{ f }}</option>
                                 {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">Curriculum</label>
+                            <select class="form-select" name="curriculum" required>
+                                <option value="ZIMSEC" {{ 'selected' if student.curriculum == 'ZIMSEC' }}>ZIMSEC</option>
+                                <option value="Cambridge" {{ 'selected' if student.curriculum == 'Cambridge' }}>Cambridge</option>
                             </select>
                         </div>
                         <div class="col-md-4 mb-3">
@@ -37,16 +44,29 @@
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Subjects</label>
-                        <div class="row">
-                            {% for subject in subjects %}
+                        <div class="row" id="oLevelSubjects" style="display:none;">
+                            <div class="col-12 mb-2"><strong>O-Level Subjects</strong></div>
+                            {% for subject in o_level %}
                             <div class="col-md-3">
                                 <div class="form-check">
-                                    <input class="form-check-input" type="checkbox" name="subjects" value="{{ subject.id }}" id="subj{{ subject.id }}" {{ 'checked' if subject.id in enrolled_ids }}>
+                                    <input class="form-check-input" type="checkbox" name="subjects" value="{{ subject.id }}" id="subj{{ subject.id }}" {{ 'checked' if subject.id in enrolled_ids }} data-level="O">
                                     <label class="form-check-label" for="subj{{ subject.id }}">{{ subject.name }}</label>
                                 </div>
                             </div>
                             {% endfor %}
                         </div>
+                        <div class="row" id="aLevelSubjects" style="display:none;">
+                            <div class="col-12 mb-2"><strong>A-Level Subjects</strong></div>
+                            {% for subject in a_level %}
+                            <div class="col-md-3">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" name="subjects" value="{{ subject.id }}" id="subj{{ subject.id }}" {{ 'checked' if subject.id in enrolled_ids }} data-level="A">
+                                    <label class="form-check-label" for="subj{{ subject.id }}">{{ subject.name }}</label>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        <div id="noFormMsg" class="text-muted" {% if student.form %}style="display:none;"{% endif %}><em>Select a form to see available subjects.</em></div>
                     </div>
                     <div class="mb-3">
                         <label class="form-label">New Password (leave blank to keep current)</label>
@@ -55,8 +75,31 @@
                     <p class="text-muted small">Reg Number: {{ student.reg_number or 'N/A' }}</p>
                     <button type="submit" class="btn btn-primary w-100"><i class="bi bi-save"></i> Update Student</button>
                 </form>
+                <hr>
+                <form method="POST" action="{{ url_for('admin_remove_student_subjects', student_id=student.id) }}" onsubmit="return confirm('Remove this student from ALL subjects/classes? This cannot be undone.');">
+                    <button type="submit" class="btn btn-outline-danger w-100"><i class="bi bi-x-circle"></i> Remove from All Subjects</button>
+                </form>
             </div>
         </div>
     </div>
 </div>
+
+<script>
+document.getElementById('formSelect').addEventListener('change', function() {
+    var val = this.value;
+    var formNum = parseInt(val.replace('Form ', ''));
+    document.getElementById('oLevelSubjects').style.display = (formNum >= 1 && formNum <= 4) ? '' : 'none';
+    document.getElementById('aLevelSubjects').style.display = (formNum >= 5) ? '' : 'none';
+    document.getElementById('noFormMsg').style.display = val ? 'none' : '';
+});
+{% if student.form %}
+(function() {
+    var val = '{{ student.form }}';
+    var formNum = parseInt(val.replace('Form ', ''));
+    document.getElementById('oLevelSubjects').style.display = (formNum >= 1 && formNum <= 4) ? '' : 'none';
+    document.getElementById('aLevelSubjects').style.display = (formNum >= 5) ? '' : 'none';
+    document.getElementById('noFormMsg').style.display = 'none';
+})();
+{% endif %}
+</script>
 {% endblock %}

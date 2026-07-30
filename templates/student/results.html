@@ -25,6 +25,7 @@
                 {% if data.monthly or data.exam %}
                 <h6><i class="bi bi-calendar-check"></i> Current Term Results</h6>
                 {% if data.monthly %}
+                <div class="table-responsive">
                 <table class="table table-sm table-bordered">
                     <thead><tr><th>Term</th><th>Month</th><th>Marks</th><th>%</th><th>Grade</th><th>Teacher Comment</th></tr></thead>
                     <tbody>
@@ -40,9 +41,11 @@
                         {% endfor %}
                     </tbody>
                 </table>
+                </div>
                 {% else %}<p class="text-muted">No monthly tests yet.</p>{% endif %}
 
                 {% if data.exam %}
+                <div class="table-responsive">
                 <table class="table table-sm table-bordered">
                     <thead><tr><th>Term</th><th>Exam</th><th>Marks</th><th>%</th><th>Grade</th><th>Teacher Comment</th></tr></thead>
                     <tbody>
@@ -58,12 +61,14 @@
                         {% endfor %}
                     </tbody>
                 </table>
+                </div>
                 {% else %}<p class="text-muted">No exams yet.</p>{% endif %}
 
                 {% if data.prev_monthly or data.prev_exam %}
                 <hr>
                 <h6><i class="bi bi-archive"></i> Previous Year Results</h6>
                 {% if data.prev_monthly %}
+                <div class="table-responsive">
                 <table class="table table-sm table-bordered">
                     <thead><tr><th>Year</th><th>Term</th><th>Month</th><th>Marks</th><th>Grade</th><th>Comment</th></tr></thead>
                     <tbody>
@@ -77,8 +82,10 @@
                         {% endfor %}
                     </tbody>
                 </table>
+                </div>
                 {% endif %}
                 {% if data.prev_exam %}
+                <div class="table-responsive">
                 <table class="table table-sm table-bordered">
                     <thead><tr><th>Year</th><th>Term</th><th>Exam</th><th>Marks</th><th>Grade</th><th>Comment</th></tr></thead>
                     <tbody>
@@ -92,6 +99,7 @@
                         {% endfor %}
                     </tbody>
                 </table>
+                </div>
                 {% endif %}
                 {% endif %}
 
@@ -119,6 +127,7 @@
         <div class="row">
             <div class="col-md-6">
                 <h6>Ordinary Level (O-Level)</h6>
+                <div class="table-responsive">
                 <table class="table table-sm table-bordered" style="max-width: 300px;">
                     <tr><td><span class="grade-A">A</span></td><td>70-100%</td><td>Excellent</td></tr>
                     <tr><td><span class="grade-B">B</span></td><td>60-69%</td><td>Very Good</td></tr>
@@ -127,9 +136,11 @@
                     <tr><td><span class="grade-E">E</span></td><td>40-44%</td><td>Marginal</td></tr>
                     <tr><td><span class="grade-U">U</span></td><td>0-39%</td><td>Ungraded</td></tr>
                 </table>
+                </div>
             </div>
             <div class="col-md-6">
                 <h6>Advanced Level (A-Level)</h6>
+                <div class="table-responsive">
                 <table class="table table-sm table-bordered" style="max-width: 300px;">
                     <tr><td><span class="grade-A">A</span></td><td>70-100%</td><td>Excellent (5 pts)</td></tr>
                     <tr><td><span class="grade-B">B</span></td><td>60-69%</td><td>Very Good (4 pts)</td></tr>
@@ -139,6 +150,7 @@
                     <tr><td><span class="grade-O">O</span></td><td>35-39%</td><td>Ordinary Pass (0 pts)</td></tr>
                     <tr><td><span class="grade-F">F</span></td><td>0-34%</td><td>Fail (0 pts)</td></tr>
                 </table>
+                </div>
             </div>
         </div>
     </div>

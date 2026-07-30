@@ -15,7 +15,7 @@
                 <i class="bi bi-mortarboard-fill"></i> SchoolBridge
             </a>
             {% if current_user.is_authenticated %}
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+            <button class="navbar-toggler border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-label="Toggle navigation">
                 <span class="navbar-toggler-icon"></span>
             </button>
             <div class="collapse navbar-collapse" id="navbarNav">
@@ -31,8 +31,10 @@
                         {% elif current_user.role == 'admin' %}
                         <li class="nav-item"><a class="nav-link" href="{{ url_for('admin_dashboard') }}"><i class="bi bi-people-fill"></i> Students</a></li>
                         <li class="nav-item"><a class="nav-link" href="{{ url_for('admin_add_student') }}"><i class="bi bi-person-plus-fill"></i> Add Student</a></li>
+                        <li class="nav-item"><a class="nav-link" href="{{ url_for('admin_activities') }}"><i class="bi bi-megaphone"></i> Activities</a></li>
                         {% elif current_user.role == 'principal' %}
                         <li class="nav-item"><a class="nav-link" href="{{ url_for('principal_dashboard') }}"><i class="bi bi-people"></i> Staff & Students</a></li>
+                        <li class="nav-item"><a class="nav-link" href="{{ url_for('principal_fee_settings') }}"><i class="bi bi-currency-dollar"></i> Fees</a></li>
                         <li class="nav-item"><a class="nav-link" href="{{ url_for('principal_timetables') }}"><i class="bi bi-calendar-week"></i> Timetables</a></li>
                         {% endif %}
                     {% else %}
@@ -45,17 +47,19 @@
                 </ul>
                 <ul class="navbar-nav">
                     <li class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
+                        <a class="nav-link dropdown-toggle fw-bold" href="#" role="button" data-bs-toggle="dropdown">
                             <i class="bi bi-person-circle"></i>
                             {% if current_user.role is defined %}
                                 {{ current_user.full_name }}
-                                <span class="badge bg-amber text-dark">{{ current_user.role|title }}</span>
+                                <span class="badge" style="background:var(--accent);color:#333;">{{ current_user.role|title }}</span>
                             {% else %}
                                 {{ current_user.full_name }}
-                                <span class="badge bg-amber text-dark">Student</span>
+                                <span class="badge" style="background:var(--accent);color:#333;">Student</span>
                             {% endif %}
                         </a>
                         <ul class="dropdown-menu dropdown-menu-end">
+                            <li><a class="dropdown-item" href="{{ url_for('auth_change_password') }}"><i class="bi bi-key"></i> Change Password</a></li>
+                            <li><hr class="dropdown-divider"></li>
                             <li><a class="dropdown-item" href="{{ url_for('auth_logout') }}"><i class="bi bi-box-arrow-right"></i> Logout</a></li>
                         </ul>
                     </li>

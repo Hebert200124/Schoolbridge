@@ -14,6 +14,7 @@
                 <span class="badge bg-{{ 'warning' if subj.level == 'A' else 'primary' }}">{{ subj.level }}-Level</span>
             </div>
             <div class="card-body">
+                <div class="table-responsive">
                 <table class="table table-sm table-borderless">
                     {% if teacher %}
                     <tr><th>Teacher:</th><td>{{ teacher.full_name }}</td></tr>
@@ -23,6 +24,7 @@
                     <tr><td colspan="2" class="text-muted">Teacher not yet assigned.</td></tr>
                     {% endif %}
                 </table>
+                </div>
             </div>
         </div>
     </div>

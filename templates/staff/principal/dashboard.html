@@ -1,10 +1,306 @@
 {% extends "base.html" %}
-{% block title %}Principal - SchoolBridge{% endblock %}
+{% block title %}Principal Dashboard - SchoolBridge{% endblock %}
 {% block content %}
-<div class="page-header d-flex justify-content-between align-items-center">
-    <h3><i class="bi bi-people"></i> Principal Dashboard</h3>
-    <a href="{{ url_for('principal_add_staff') }}" class="btn btn-primary"><i class="bi bi-person-plus"></i> Add Staff</a>
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h4 class="mb-1">SchoolBridge Dashboard</h4>
+        <p class="text-muted mb-0">Welcome, {{ current_user.full_name }}<br><small>You are logged in as Principal.</small></p>
+    </div>
+    <div>
+        <a href="{{ url_for('principal_fee_settings') }}" class="btn btn-outline-warning me-2"><i class="bi bi-currency-dollar"></i> Fee Settings</a>
+        <a href="{{ url_for('principal_add_staff') }}" class="btn btn-primary"><i class="bi bi-person-plus"></i> Add Staff</a>
+    </div>
 </div>
+
+<div class="row g-3 mb-4">
+    <div class="col-md-3">
+        <div class="card border-left-primary h-100">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h6 class="text-muted mb-1">Total Students</h6>
+                        <h3 class="mb-0">{{ students|length }}</h3>
+                        <small class="text-success">{{ zimsec_students }} ZIMSEC</small>
+                    </div>
+                    <div class="fs-2 text-primary"><i class="bi bi-people"></i></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-left-success h-100">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h6 class="text-muted mb-1">Fee Collection ({{ term }})</h6>
+                        <h3 class="mb-0">${{ "%.0f"|format(total_collected) }}</h3>
+                        <small class="text-muted">of ${{ "%.0f"|format(total_expected) }} expected</small>
+                    </div>
+                    <div class="fs-2 text-success"><i class="bi bi-currency-dollar"></i></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-left-warning h-100">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h6 class="text-muted mb-1">Outstanding</h6>
+                        <h3 class="mb-0 text-danger">${{ "%.0f"|format(outstanding) }}</h3>
+                        <small>{{ outstanding_list|length }} accounts</small>
+                    </div>
+                    <div class="fs-2 text-warning"><i class="bi bi-exclamation-triangle"></i></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-left-info h-100">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h6 class="text-muted mb-1">Staff</h6>
+                        <h3 class="mb-0">{{ active_staff_count }}</h3>
+                        <small class="text-warning">{{ staff_on_leave }} on leave</small>
+                    </div>
+                    <div class="fs-2 text-info"><i class="bi bi-person-badge"></i></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header"><h6 class="mb-0"><i class="bi bi-currency-dollar"></i> Fee Collection Summary — {{ term }}</h6></div>
+            <div class="card-body">
+                <div class="row text-center g-2">
+                    <div class="col-4">
+                        <h5 class="text-primary mb-0">${{ "%.2f"|format(total_expected) }}</h5>
+                        <small class="text-muted">Expected</small>
+                    </div>
+                    <div class="col-4">
+                        <h5 class="text-success mb-0">${{ "%.2f"|format(total_collected) }}</h5>
+                        <small class="text-muted">Collected</small>
+                    </div>
+                    <div class="col-4">
+                        <h5 class="text-danger mb-0">${{ "%.2f"|format(outstanding) }}</h5>
+                        <small class="text-muted">Outstanding</small>
+                    </div>
+                </div>
+                <div class="progress mt-2" style="height:10px;">
+                    {% set pct = (total_collected / total_expected * 100) if total_expected > 0 else 0 %}
+                    <div class="progress-bar bg-success" style="width:{{ pct }}%">{{ "%.1f"|format(pct) }}%</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card">
+            <div class="card-header"><h6 class="mb-0"><i class="bi bi-person-badge"></i> Staff & Attendance</h6></div>
+            <div class="card-body text-center">
+                <h3>{{ active_staff_count }}</h3>
+                <p class="mb-0">Active Staff</p>
+                <span class="badge bg-warning">{{ staff_on_leave }} on leave</span>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card">
+            <div class="card-header"><h6 class="mb-0"><i class="bi bi-clock"></i> Upcoming Exams</h6></div>
+            <div class="card-body p-0">
+                {% if upcoming_exams %}
+                <ul class="list-group list-group-flush">
+                    {% for exam in upcoming_exams[:3] %}
+                    {% set days_left = (exam.exam_date - now().date()).days %}
+                    <li class="list-group-item py-2 small">
+                        <strong>{{ exam.subject_rel.name }}</strong><br>
+                        {{ exam.exam_date.strftime('%d %b') }} 
+                        <span class="badge {% if days_left <= 7 %}bg-danger{% elif days_left <= 30 %}bg-warning{% else %}bg-info{% endif %}">{{ days_left }} days</span>
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% else %}
+                <div class="p-3 text-muted small">No upcoming exams.</div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header"><h6 class="mb-0"><i class="bi bi-currency-dollar"></i> Outstanding Balances</h6></div>
+            <div class="card-body p-0">
+                {% if outstanding_list %}
+                <div class="table-responsive">
+                    <table class="table table-sm mb-0">
+                        <thead><tr><th>Student</th><th>Form</th><th>Balance</th></tr></thead>
+                        <tbody>
+                            {% for fa in outstanding_list[:10] %}
+                            <tr>
+                                <td>{{ fa.student.full_name }}</td>
+                                <td>{{ fa.student.form }}</td>
+                                <td class="text-danger fw-bold">${{ "%.2f"|format(fa.balance) }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="p-3 text-muted">No outstanding balances.</div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header"><h6 class="mb-0"><i class="bi bi-megaphone"></i> Announcements &amp; Activities</h6></div>
+            <div class="card-body p-0">
+                {% if recent_activity_posts %}
+                <ul class="list-group list-group-flush">
+                    {% for act in recent_activity_posts %}
+                    <li class="list-group-item py-2">
+                        <small><strong>{{ act.title }}</strong>
+                        {% if act.visibility == 'staff' %}<span class="badge bg-secondary">Staff Only</span>{% endif %}<br>
+                        <span class="text-muted">{{ act.description or '' }}</span><br>
+                        <span class="text-muted small">{{ act.created_at.strftime('%d %b %Y %H:%M') }} &middot; by {{ act.creator.first_name }} {{ act.creator.last_name }}</span></small>
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% else %}
+                <div class="p-3 text-muted">No announcements yet.</div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header"><h6 class="mb-0"><i class="bi bi-graph-up"></i> Pass Rate by Subject ({{ term }})</h6></div>
+            <div class="card-body p-0">
+                {% if pass_rates %}
+                <div class="table-responsive">
+                    <table class="table table-sm mb-0">
+                        <thead><tr><th>Subject</th><th>Pass Rate</th><th>Entries</th></tr></thead>
+                        <tbody>
+                            {% for pr in pass_rates %}
+                            <tr>
+                                <td>{{ pr.subject }}</td>
+                                <td>
+                                    <div class="progress" style="height:20px;">
+                                        <div class="progress-bar {% if pr.rate >= 50 %}bg-success{% elif pr.rate >= 30 %}bg-warning{% else %}bg-danger{% endif %}" style="width:{{ pr.rate }}%">{{ pr.rate }}%</div>
+                                    </div>
+                                </td>
+                                <td>{{ pr.total }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="p-3 text-muted">No exam data yet.</div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header"><h6 class="mb-0"><i class="bi bi-bar-chart"></i> Pass Rate by Form ({{ term }})</h6></div>
+            <div class="card-body p-0">
+                {% if form_pass_rates %}
+                <div class="table-responsive">
+                    <table class="table table-sm mb-0">
+                        <thead><tr><th>Form</th><th>Pass Rate</th><th>Entries</th></tr></thead>
+                        <tbody>
+                            {% for fpr in form_pass_rates %}
+                            <tr>
+                                <td>{{ fpr.form }}</td>
+                                <td>
+                                    <div class="progress" style="height:20px;">
+                                        <div class="progress-bar {% if fpr.rate >= 50 %}bg-success{% elif fpr.rate >= 30 %}bg-warning{% else %}bg-danger{% endif %}" style="width:{{ fpr.rate }}%">{{ fpr.rate }}%</div>
+                                    </div>
+                                </td>
+                                <td>{{ fpr.total }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="p-3 text-muted">No exam data yet.</div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header"><h6 class="mb-0"><i class="bi bi-piggy-bank"></i> Levy / Development Fund Tracking</h6></div>
+            <div class="card-body p-0">
+                {% if levies %}
+                <div class="table-responsive">
+                    <table class="table table-sm mb-0">
+                        <thead><tr><th>Fund</th><th>Target</th><th>Collected</th><th>Balance</th></tr></thead>
+                        <tbody>
+                            {% for levy in levies %}
+                            <tr>
+                                <td>{{ levy.name }}</td>
+                                <td>${{ "%.2f"|format(levy.total_amount) }}</td>
+                                <td>${{ "%.2f"|format(levy.amount_collected) }}</td>
+                                <td class="{% if levy.balance > 0 %}text-danger{% else %}text-success{% endif %}">${{ "%.2f"|format(levy.balance) }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="p-3 text-muted">No levies set for this term.</div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card h-100">
+            <div class="card-body text-center">
+                <h6 class="text-muted"><i class="bi bi-download"></i> Reports</h6>
+                <hr>
+                <a href="{{ url_for('export_zimsec_candidates') }}" class="btn btn-outline-info btn-sm w-100 mb-2"><i class="bi bi-person-check"></i> ZIMSEC Candidates</a>
+                <a href="{{ url_for('export_ministry_report') }}" class="btn btn-outline-secondary btn-sm w-100"><i class="bi bi-file-earmark-bar-graph"></i> Ministry Report</a>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card h-100">
+            <div class="card-body text-center">
+                <h6 class="text-muted"><i class="bi bi-upload"></i> Results Entry</h6>
+                <hr>
+                <p class="small text-muted">Bulk upload Excel mark sheets coming soon.</p>
+                <span class="badge bg-secondary">Term 1</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    var hash = window.location.hash;
+    if (hash) {
+        var tab = document.querySelector('[data-bs-target="' + hash + '"]');
+        if (tab) {
+            var trigger = new bootstrap.Tab(tab);
+            trigger.show();
+        }
+    }
+});
+</script>
 
 <ul class="nav nav-tabs mb-4" id="principalTabs">
     <li class="nav-item"><button class="nav-link active" id="staff-tab" data-bs-toggle="tab" data-bs-target="#staff" type="button">Staff Members</button></li>
@@ -14,7 +310,10 @@
 <div class="tab-content">
     <div class="tab-pane fade show active" id="staff">
         <div class="card">
-            <div class="card-header"><h5 class="mb-0"><i class="bi bi-people"></i> All Staff Members</h5></div>
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="bi bi-people"></i> All Staff Members</h5>
+                <a href="{{ url_for('principal_add_staff') }}" class="btn btn-sm btn-primary"><i class="bi bi-person-plus"></i> Add Staff</a>
+            </div>
             <div class="card-body">
                 {% if staff %}
                 <div class="table-responsive">
@@ -38,7 +337,7 @@
                                 <td>
                                     <a href="{{ url_for('principal_edit_staff', staff_id=member.id) }}" class="btn btn-sm btn-outline-primary"><i class="bi bi-pencil"></i></a>
                                     {% if member.role != 'principal' %}
-                                    <a href="{{ url_for('principal_fire_staff', staff_id=member.id) }}" class="btn btn-sm btn-outline-danger" onclick="return confirm('Fire {{ member.full_name }} and remove their login?')"><i class="bi bi-person-x"></i></a>
+                                    <a href="{{ url_for('principal_fire_staff', staff_id=member.id) }}" class="btn btn-sm btn-outline-danger" onclick="return confirm('Fire {{ member.full_name }}?')"><i class="bi bi-person-x"></i></a>
                                     {% endif %}
                                 </td>
                             </tr>
@@ -55,14 +354,20 @@
 
     <div class="tab-pane fade" id="students">
         <div class="card">
-            <div class="card-header"><h5 class="mb-0"><i class="bi bi-mortarboard"></i> All Students — Fees & Results</h5></div>
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="bi bi-mortarboard"></i> All Students — Fees & Results</h5>
+                <div>
+                    <a href="{{ url_for('export_zimsec_candidates') }}" class="btn btn-sm btn-outline-info me-2"><i class="bi bi-download"></i> ZIMSEC Candidates</a>
+                    <a href="{{ url_for('export_ministry_report') }}" class="btn btn-sm btn-outline-secondary"><i class="bi bi-file-earmark-bar-graph"></i> Ministry Report</a>
+                </div>
+            </div>
             <div class="card-body">
                 {% if students %}
                 <div class="table-responsive">
                     <table class="table table-hover">
                         <thead>
                             <tr>
-                                <th>Student ID</th><th>Name</th><th>Form</th><th>Total Fees</th><th>Amount Paid</th><th>Balance</th><th>Status</th><th>Actions</th>
+                                <th>Student ID</th><th>Name</th><th>Form</th><th>Curriculum</th><th>Total Fees</th><th>Paid</th><th>Balance</th><th>Status</th><th>Actions</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -72,15 +377,19 @@
                                 <td><strong>{{ s.student_id }}</strong></td>
                                 <td>{{ s.full_name }}</td>
                                 <td>{{ s.form }}</td>
+                                <td><span class="badge bg-secondary">{{ s.curriculum or 'ZIMSEC' }}</span></td>
                                 <td>${{ "%.2f"|format(sf.fee.total_fees) if sf.fee else '0.00' }}</td>
                                 <td>${{ "%.2f"|format(sf.total_paid) }}</td>
                                 <td class="{% if sf.fee and sf.fee.balance > 0 %}text-danger fw-bold{% else %}text-success{% endif %}">
                                     ${{ "%.2f"|format(sf.fee.balance) if sf.fee else '0.00' }}
                                 </td>
-                                <td>{% if s.is_active %}<span class="badge bg-success">Active</span>{% else %}<span class="badge bg-danger">Transferred</span>{% endif %}</td>
+                                <td>{% if s.is_active %}<span class="badge bg-success">Active</span>{% else %}<span class="badge bg-danger">Inactive</span>{% endif %}</td>
                                 <td>
                                     <a href="{{ url_for('principal_student_results', student_id=s.id) }}" class="btn btn-sm btn-info text-white"><i class="bi bi-file-text"></i> Results</a>
-                                    <a href="{{ url_for('principal_dismiss_student', student_id=s.id) }}" class="btn btn-sm btn-outline-danger" onclick="return confirm('Dismiss {{ s.full_name }} completely? This deletes all records.')"><i class="bi bi-person-x"></i></a>
+                                    <a href="{{ url_for('principal_edit_student_fees', student_id=s.id) }}" class="btn btn-sm btn-outline-warning"><i class="bi bi-currency-dollar"></i> Fees</a>
+                                    <a href="{{ url_for('principal_toggle_student_status', student_id=s.id) }}" class="btn btn-sm btn-outline-{{ 'danger' if s.is_active else 'success' }}" onclick="return confirm('{{ 'Deactivate' if s.is_active else 'Reactivate' }} {{ s.full_name }}?')">
+                                        <i class="bi bi-{{ 'person-x' if s.is_active else 'person-check' }}"></i>
+                                    </a>
                                 </td>
                             </tr>
                             {% endfor %}

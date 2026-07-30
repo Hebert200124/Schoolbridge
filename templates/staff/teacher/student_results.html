@@ -12,6 +12,7 @@
     </div>
     <div class="card-body">
         {% if monthly_tests %}
+        <div class="table-responsive">
         <table class="table table-sm table-hover">
             <thead>
                 <tr>
@@ -31,6 +32,7 @@
                 {% endfor %}
             </tbody>
         </table>
+        </div>
         {% else %}
         <p class="text-muted">No monthly test records.</p>
         {% endif %}
@@ -43,6 +45,7 @@
     </div>
     <div class="card-body">
         {% if exam_marks %}
+        <div class="table-responsive">
         <table class="table table-sm table-hover">
             <thead>
                 <tr>
@@ -62,6 +65,7 @@
                 {% endfor %}
             </tbody>
         </table>
+        </div>
         {% else %}
         <p class="text-muted">No exam records.</p>
         {% endif %}

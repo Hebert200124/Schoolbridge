@@ -9,6 +9,7 @@
             <div class="card-header"><h5 class="mb-0"><i class="bi bi-file-text"></i> Fee Statement</h5></div>
             <div class="card-body">
                 {% if fee_account %}
+                <div class="table-responsive">
                 <table class="table table-bordered">
                     <tr><th>Term</th><td>{{ fee_account.term }}</td></tr>
                     <tr><th>Total Fees</th><td class="fw-bold">${{ "%.2f"|format(fee_account.total_fees) }}</td></tr>
@@ -20,6 +21,7 @@
                         {% else %}<span class="text-danger fw-bold fs-5">${{ "%.2f"|format(fee_account.balance) }}</span>{% endif %}</td>
                     </tr>
                 </table>
+                </div>
                 {% if fee_account.balance > 0 %}
                 <div class="alert alert-warning">
                     <i class="bi bi-exclamation-triangle"></i>

@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}Edit Activity - SchoolBridge{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header"><h5 class="mb-0"><i class="bi bi-pencil-square"></i> Edit Activity</h5></div>
+            <div class="card-body">
+                <form method="POST">
+                    <div class="mb-3">
+                        <label class="form-label">Title <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" name="title" value="{{ activity.title }}" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Description</label>
+                        <textarea class="form-control" name="description" rows="4">{{ activity.description or '' }}</textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Visibility</label>
+                        <select class="form-select" name="visibility">
+                            <option value="all" {% if activity.visibility == 'all' %}selected{% endif %}>Everyone (staff &amp; students)</option>
+                            <option value="staff" {% if activity.visibility == 'staff' %}selected{% endif %}>Staff Only</option>
+                        </select>
+                    </div>
+                    <div class="d-flex justify-content-between">
+                        <a href="{{ url_for('admin_activities') }}" class="btn btn-outline-secondary">Cancel</a>
+                        <button type="submit" class="btn btn-primary">Update Activity</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

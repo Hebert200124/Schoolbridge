@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}Manage Activities - SchoolBridge{% endblock %}
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h4 class="mb-0"><i class="bi bi-megaphone"></i> Manage Announcements &amp; Activities</h4>
+        <a href="{{ url_for('admin_add_new_activity') }}" class="btn btn-primary"><i class="bi bi-plus"></i> New Activity</a>
+    </div>
+    <div class="card">
+        <div class="card-body p-0">
+            {% if activities_list %}
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead>
+                        <tr>
+                            <th>Title</th>
+                            <th>Description</th>
+                            <th>Visibility</th>
+                            <th>Created By</th>
+                            <th>Date</th>
+                            <th style="width:140px">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for act in activities_list %}
+                        <tr>
+                            <td><strong>{{ act.title }}</strong></td>
+                            <td class="text-muted">{{ act.description|truncate(60) or '-' }}</td>
+                            <td>
+                                {% if act.visibility == 'staff' %}
+                                <span class="badge bg-secondary">Staff Only</span>
+                                {% else %}
+                                <span class="badge bg-success">Everyone</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ act.creator.first_name }} {{ act.creator.last_name }}</td>
+                            <td class="small text-muted">{{ act.created_at.strftime('%d %b %Y %H:%M') }}</td>
+                            <td>
+                                <a href="{{ url_for('admin_edit_activity', id=act.id) }}" class="btn btn-sm btn-outline-primary" title="Edit"><i class="bi bi-pencil"></i></a>
+                                <form method="POST" action="{{ url_for('admin_delete_activity', id=act.id) }}" style="display:inline" onsubmit="return confirm('Delete this activity?')">
+                                    <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete"><i class="bi bi-trash"></i></button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="p-4 text-center text-muted">No activities yet. <a href="{{ url_for('admin_add_new_activity') }}">Create one</a>.</div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

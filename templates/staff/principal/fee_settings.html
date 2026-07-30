@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}Fee Settings - SchoolBridge{% endblock %}
+{% block content %}
+<div class="page-header d-flex justify-content-between align-items-center">
+    <h3><i class="bi bi-currency-dollar"></i> Fee Settings by Form</h3>
+    <a href="{{ url_for('principal_dashboard') }}" class="btn btn-outline-primary"><i class="bi bi-arrow-left"></i> Back</a>
+</div>
+
+<div class="row">
+    <div class="col-md-5">
+        <div class="card">
+            <div class="card-header"><h5 class="mb-0">Set Term Fee</h5></div>
+            <div class="card-body">
+                <form method="POST">
+                    <div class="mb-3">
+                        <label class="form-label">Form</label>
+                        <select class="form-select" name="form" required>
+                            <option value="">Select form...</option>
+                            {% for f in forms %}
+                            <option value="{{ f }}">{{ f }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Term Fee ($)</label>
+                        <input type="number" step="0.01" min="0" class="form-control" name="term_fee" required placeholder="e.g. 500.00">
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100"><i class="bi bi-save"></i> Save</button>
+                </form>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-7">
+        <div class="card">
+            <div class="card-header"><h5 class="mb-0">Current Fee Structure</h5></div>
+            <div class="card-body">
+                {% if fee_settings %}
+                <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead><tr><th>Form</th><th>Term Fee</th><th>Last Updated</th><th>Action</th></tr></thead>
+                    <tbody>
+                        {% for fs in fee_settings %}
+                        <tr>
+                            <td><strong>{{ fs.form }}</strong></td>
+                            <td>${{ "%.2f"|format(fs.term_fee) }}</td>
+                            <td><small>{{ fs.updated_at.strftime('%d %b %Y') }}</small></td>
+                            <td><a href="{{ url_for('principal_delete_fee_setting', fs_id=fs.id) }}" class="btn btn-sm btn-outline-danger" onclick="return confirm('Remove fee setting for {{ fs.form }}?')"><i class="bi bi-trash"></i></a></td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                </div>
+                {% else %}
+                <p class="text-muted">No fee settings configured yet.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
