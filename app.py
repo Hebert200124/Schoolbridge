@@ -12,9 +12,20 @@ app = Flask(__name__)
 app.config.from_object(Config)
 app.jinja_env.auto_reload = True
 app.config['TEMPLATES_AUTO_RELOAD'] = True
+
 db.init_app(app)
 with app.app_context():
     db.create_all()
+    from sqlalchemy import inspect, text
+    inspector = inspect(db.engine)
+    existing_columns = [col['name'] for col in inspector.get_columns('students')]
+    if 'curriculum' not in existing_columns:
+        with db.engine.connect() as conn:
+            conn.execute(text('ALTER TABLE students ADD COLUMN curriculum VARCHAR(20)'))
+            conn.commit()
+
+
+
 login_manager = LoginManager(app)
 login_manager.login_view = 'auth_login'
 login_manager.login_message_category = 'info'
