@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Verify Email - SchoolBridge{% endblock %}
+{% block content %}
+<div class="login-container">
+    <div class="card login-card">
+        <div class="login-header">
+            <h2><i class="bi bi-envelope-check"></i> Verify Email</h2>
+            <p class="mb-0 opacity-75">Step 2 of 3 - Enter the email on your account</p>
+        </div>
+        <div class="card-body p-4">
+            <form method="POST" action="{{ url_for('auth_reset_email') }}">
+                <div class="mb-3">
+                    <label class="form-label">Registration Number</label>
+                    <input type="text" class="form-control" value="{{ reg_number }}" disabled>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Email Address</label>
+                    <input type="email" class="form-control" name="email" required placeholder="e.g. tendai.mukaro@student.schoolbridge.zw" autofocus>
+                </div>
+                <button type="submit" class="btn btn-primary w-100"><i class="bi bi-send"></i> Send OTP</button>
+            </form>
+            <hr class="my-4">
+            <div class="text-center">
+                <a href="{{ url_for('auth_reset_password') }}"><i class="bi bi-arrow-left"></i> Change Registration Number</a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

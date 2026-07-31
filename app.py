@@ -1,5 +1,6 @@
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
+from flask_mail import Mail, Message
 from models import db, User, Student, Subject, StudentSubject, MonthlyTest, ExamMark, FeeAccount, Payment, FeeSetting, Timetable, ExamTimetable, PrincipalComment, TeacherRemark, ActivityLog, Activity, StaffLeave, LevyFund, OTPCode, zim_grade
 from config import Config
 from functools import wraps
@@ -12,6 +13,8 @@ app = Flask(__name__)
 app.config.from_object(Config)
 app.jinja_env.auto_reload = True
 app.config['TEMPLATES_AUTO_RELOAD'] = True
+
+mail = Mail(app)
 
 db.init_app(app)
 with app.app_context():
@@ -177,13 +180,38 @@ def auth_change_password():
     return render_template('auth/change_password.html')
 
 
-def normalize_phone(p):
-    return ''.join(c for c in p if c.isdigit() or c == '+')
+def send_otp_email(to_email, otp_code, expires_minutes=10):
+    """Send the OTP code to the user's email via Flask-Mail."""
+    try:
+        msg = Message(
+            subject='SchoolBridge: Your Password Reset OTP',
+            recipients=[to_email],
+        )
+        msg.html = f"""
+        <div style="font-family:Arial,Helvetica,sans-serif;max-width:480px;margin:0 auto;border:1px solid #E2E8F0;border-radius:10px;overflow:hidden;">
+            <div style="background:#334E68;color:#ffffff;padding:24px;text-align:center;">
+                <h2 style="margin:0;">SchoolBridge</h2>
+                <p style="margin:4px 0 0;opacity:0.85;">Password Reset</p>
+            </div>
+            <div style="padding:24px;">
+                <p>Hello,</p>
+                <p>Use the one-time password below to reset your SchoolBridge account password. This code expires in <strong>{expires_minutes} minutes</strong>.</p>
+                <div style="text-align:center;font-size:32px;font-weight:700;letter-spacing:8px;color:#334E68;background:#F9FAFB;border-radius:8px;padding:16px;margin:16px 0;">{otp_code}</div>
+                <p style="color:#6B7280;font-size:13px;">If you did not request this, you can safely ignore this email.</p>
+            </div>
+        </div>
+        """
+        mail.send(msg)
+        app.logger.info(f'[MAIL] OTP sent to: {to_email}')
+        return True
+    except Exception as e:
+        app.logger.exception(f'[MAIL] Failed to send OTP email: {e}')
+        return False
 
-def find_person_by_reg_and_phone(reg_raw, phone_raw):
-    phone_normalized = normalize_phone(phone_raw)
+
+def _reg_variants(reg_raw):
     reg_clean = reg_raw.replace('-', '').replace('REG', '').replace('reg', '')
-    reg_variants = list(set([
+    return list(set([
         reg_raw,
         reg_raw.replace('-', ''),
         f'REG-{reg_clean}',
@@ -191,84 +219,68 @@ def find_person_by_reg_and_phone(reg_raw, phone_raw):
         reg_raw.upper(),
     ]))
 
-    from itertools import chain
-    candidates = list(chain.from_iterable(
-        User.query.filter(User.reg_number == r).all() for r in reg_variants
-    )) + list(chain.from_iterable(
-        Student.query.filter(Student.reg_number == r).all() for r in reg_variants
-    )) + list(chain.from_iterable(
-        Student.query.filter(Student.student_id == r).all() for r in reg_variants
-    )) + list(chain.from_iterable(
-        User.query.filter(User.username == r).all() for r in reg_variants
-    ))
 
+def find_person_by_reg(reg_raw):
+    from itertools import chain
+    variants = _reg_variants(reg_raw)
+    candidates = list(chain.from_iterable(
+        User.query.filter(User.reg_number == r).all() for r in variants
+    )) + list(chain.from_iterable(
+        Student.query.filter(Student.reg_number == r).all() for r in variants
+    )) + list(chain.from_iterable(
+        Student.query.filter(Student.student_id == r).all() for r in variants
+    )) + list(chain.from_iterable(
+        User.query.filter(User.username == r).all() for r in variants
+    ))
     seen = set()
     for p in candidates:
         if p.id in seen:
             continue
         seen.add(p.id)
-        if normalize_phone(p.phone or '') == phone_normalized:
-            return p
+        return p
     return None
 
-
-def send_sms(phone, message):
-    """Send SMS via Africa's Talking SDK. Also logs to console for debugging."""
-    api_key = os.environ.get('AT_API_KEY', '')
-    username = os.environ.get('AT_USERNAME', '')
-    sender_id = os.environ.get('AT_SENDER_ID', 'SchoolBridge')
-
-    app.logger.info(f'[SMS] To: {phone} | Message: {message}')
-
-    if not api_key or not username:
-        app.logger.warning('SMS not sent: AT_API_KEY or AT_USERNAME not set')
-        return True
-
-    try:
-        import africastalking
-        africastalking.initialize(username, api_key)
-        sms = africastalking.SMS
-        resp = sms.send(message, [phone], sender_id)
-        app.logger.info(f'[SMS] Africa\'s Talking response: {resp}')
-        return resp.get('SMSMessageData', {}).get('Recipients', [{}])[0].get('status', '') == 'Success'
-    except ImportError:
-        try:
-            import requests
-            resp = requests.post(
-                'https://api.africastalking.com/version1/messaging',
-                data={
-                    'username': username,
-                    'to': phone,
-                    'message': message,
-                    'from': sender_id,
-                },
-                headers={'ApiKey': api_key, 'Content-Type': 'application/x-www-form-urlencoded'},
-                timeout=10
-            )
-            app.logger.info(f'[SMS] Direct API response: {resp.status_code} {resp.text}')
-            return resp.ok
-        except Exception as e:
-            app.logger.exception(f'[SMS] Direct API call failed: {e}')
-            return False
-    except Exception as e:
-        app.logger.exception(f'[SMS] SDK call failed: {e}')
-        return False
 
 @app.route('/auth/reset-password', methods=['GET', 'POST'])
 def auth_reset_password():
     if request.method == 'POST':
         reg_number = request.form.get('reg_number', '').strip()
-        phone = request.form.get('phone', '').strip()
-        phone_normalized = normalize_phone(phone)
+        person = find_person_by_reg(reg_number)
 
-        person = find_person_by_reg_and_phone(reg_number, phone)
+        session['reset_reg_number'] = reg_number
+        if person:
+            session['reset_user_type'] = 'User' if isinstance(person, User) else 'Student'
+            session['reset_user_id'] = person.id
+        else:
+            session.pop('reset_user_type', None)
+            session.pop('reset_user_id', None)
 
-        if not person:
-            flash('If those details match our records, an OTP has been sent to your phone.', 'info')
-            return redirect(url_for('auth_reset_password'))
+        return redirect(url_for('auth_reset_email'))
 
-        user_type = 'User' if isinstance(person, User) else 'Student'
-        user_id = person.id
+    return render_template('auth/reset_password.html')
+
+
+@app.route('/auth/reset-email', methods=['GET', 'POST'])
+def auth_reset_email():
+    reg_number = session.get('reset_reg_number')
+    if not reg_number:
+        flash('Please enter your registration number first.', 'warning')
+        return redirect(url_for('auth_reset_password'))
+
+    if request.method == 'POST':
+        email = request.form.get('email', '').strip()
+        user_type = session.get('reset_user_type')
+        user_id = session.get('reset_user_id')
+
+        person = None
+        if user_type and user_id:
+            person = User.query.get(user_id) if user_type == 'User' else Student.query.get(user_id)
+
+        if not person or (person.email or '').strip().lower() != email.strip().lower():
+            flash('If those details match our records, an OTP has been sent to your email.', 'info')
+            return redirect(url_for('auth_reset_email'))
+
+        email_clean = (person.email or '').strip().lower()
 
         latest = OTPCode.query.filter_by(
             user_type=user_type, user_id=user_id, used=False
@@ -277,11 +289,11 @@ def auth_reset_password():
         if latest and latest.is_rate_limited():
             remaining = int(900 - (datetime.utcnow() - latest.request_window_start).total_seconds())
             flash(f'Too many OTP requests. Try again in {remaining // 60} minute(s).', 'danger')
-            return redirect(url_for('auth_reset_password'))
+            return redirect(url_for('auth_reset_email'))
 
         if latest and (datetime.utcnow() - latest.created_at).total_seconds() < 60:
             flash('Please wait at least 1 minute before requesting a new OTP.', 'warning')
-            return redirect(url_for('auth_reset_password'))
+            return redirect(url_for('auth_reset_email'))
 
         code = f'{random.randint(0, 999999):06d}'
         now = datetime.utcnow()
@@ -292,7 +304,7 @@ def auth_reset_password():
         else:
             otp = OTPCode(
                 user_type=user_type, user_id=user_id,
-                phone=phone_normalized, code=code,
+                phone=email_clean, code=code,
                 created_at=now, expires_at=now + timedelta(minutes=10),
                 request_window_start=now
             )
@@ -306,21 +318,20 @@ def auth_reset_password():
 
         db.session.commit()
 
-        message = f'SchoolBridge: Your OTP is {code}. It expires in 10 minutes. Do not share this code.'
-        send_sms(phone_normalized, message)
+        send_otp_email(email_clean, code)
 
         if app.debug:
-            flash(f'[DEV] OTP for {phone_normalized}: {code}', 'info')
+            flash(f'[DEV] OTP for {email_clean}: {code}', 'info')
 
         session['reset_otp_id'] = otp.id
-        session['reset_phone'] = phone_normalized
+        session['reset_phone'] = email_clean
         session['reset_user_type'] = user_type
         session['reset_user_id'] = user_id
 
-        flash('A 6-digit OTP has been sent to your phone.', 'success')
+        flash('A 6-digit OTP has been sent to your email.', 'success')
         return redirect(url_for('auth_reset_code'))
 
-    return render_template('auth/reset_password.html')
+    return render_template('auth/reset_email.html', reg_number=reg_number)
 
 
 @app.route('/auth/reset-code', methods=['GET', 'POST'])
