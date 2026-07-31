@@ -50,11 +50,13 @@ def inject_now():
 
 def generate_student_id():
     year = datetime.now().year
-    while True:
-        num = random.randint(1000, 9999)
-        sid = f'{year}{num}'
-        if not Student.query.filter_by(student_id=sid).first():
-            return sid
+    prefix = str(year)
+    max_num = 0
+    for s in Student.query.all():
+        sid = s.student_id
+        if sid and sid.startswith(prefix) and sid[len(prefix):].isdigit():
+            max_num = max(max_num, int(sid[len(prefix):]))
+    return f'{prefix}{max_num + 1:03d}'
 
 
 def log_activity(action, description=None, user=None, student=None, visibility='public'):
