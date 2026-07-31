@@ -26,6 +26,16 @@ with app.app_context():
             conn.execute(text('ALTER TABLE students ADD COLUMN curriculum VARCHAR(20)'))
             conn.commit()
 
+    # otp_codes.phone stores the email address now; widen it on Postgres (VARCHAR(20) is too short)
+    if db.engine.dialect.name == 'postgresql':
+        phone_cols = [c for c in inspector.get_columns('otp_codes') if c['name'] == 'phone']
+        if phone_cols:
+            length = getattr(phone_cols[0]['type'], 'length', None)
+            if length is not None and length < 255:
+                with db.engine.connect() as conn:
+                    conn.execute(text('ALTER TABLE otp_codes ALTER COLUMN phone TYPE VARCHAR(255)'))
+                    conn.commit()
+
 
 
 login_manager = LoginManager(app)

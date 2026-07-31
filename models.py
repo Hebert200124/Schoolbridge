@@ -315,7 +315,7 @@ class OTPCode(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_type = db.Column(db.String(10), nullable=False)
     user_id = db.Column(db.Integer, nullable=False)
-    phone = db.Column(db.String(20), nullable=False)
+    phone = db.Column(db.String(255), nullable=False)
     code = db.Column(db.String(6), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     expires_at = db.Column(db.DateTime, nullable=False)
