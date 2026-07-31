@@ -80,6 +80,15 @@ a .stat-card {
     cursor: pointer;
 }
 
+a.stat-link {
+    display: block;
+    color: inherit;
+}
+
+a.stat-link .stat-card {
+    cursor: pointer;
+}
+
 .stat-card .stat-icon {
     font-size: 2.5rem;
     margin-bottom: 0.5rem;

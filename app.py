@@ -819,52 +819,8 @@ def admin_dashboard():
     students = Student.query.order_by(Student.created_at.desc()).all()
     active_students = [s for s in students if s.is_active]
     inactive_students = [s for s in students if not s.is_active]
-
-    term = 'Term 1'
-    total_expected = db.session.query(db.func.sum(FeeAccount.total_fees)).filter_by(term=term).scalar() or 0
-    total_collected = db.session.query(db.func.sum(Payment.amount)).filter(Payment.cleared == True).scalar() or 0
-    fee_accounts = FeeAccount.query.filter_by(term=term).all()
-    outstanding = sum(fa.balance for fa in fee_accounts if fa.balance > 0)
-    outstanding_list = [fa for fa in fee_accounts if fa.balance > 0]
-
-    staff_count = User.query.filter(User.role != 'principal').count()
-
-    now_date = date.today()
-    upcoming_exams = ExamTimetable.query.filter(ExamTimetable.exam_date >= now_date).order_by(ExamTimetable.exam_date).limit(5).all()
-
-    recent_activities = ActivityLog.query.order_by(ActivityLog.created_at.desc()).limit(10).all()
-    recent_activity_posts = Activity.query.order_by(Activity.created_at.desc()).limit(10).all()
-
-    staff_leaves = StaffLeave.query.filter(StaffLeave.status == 'Approved', StaffLeave.end_date >= now_date).count()
-
-    subjects = Subject.query.all()
-    pass_rates = []
-    for subj in subjects:
-        exams = ExamMark.query.filter_by(subject_id=subj.id, term=term).all()
-        if exams:
-            passed = sum(1 for e in exams if e.marks / e.total_marks * 100 >= 50)
-            pass_rates.append({'subject': subj.name, 'rate': round(passed / len(exams) * 100, 1), 'total': len(exams)})
-
-    form_pass_rates = []
-    forms = ['Form 1', 'Form 2', 'Form 3', 'Form 4', 'Form 5', 'Form 6']
-    for f in forms:
-        student_ids = [s.id for s in Student.query.filter_by(form=f).all()]
-        if student_ids:
-            exams = ExamMark.query.filter(ExamMark.student_id.in_(student_ids), ExamMark.term == term).all()
-            if exams:
-                passed = sum(1 for e in exams if e.marks / e.total_marks * 100 >= 50)
-                form_pass_rates.append({'form': f, 'rate': round(passed / len(exams) * 100, 1), 'total': len(exams)})
-
-    levies = LevyFund.query.filter_by(term=term).all()
-
     return render_template('staff/admin/dashboard.html', students=students, active_students=active_students,
-                           inactive_students=inactive_students, total_expected=total_expected,
-                           total_collected=total_collected, outstanding=outstanding,
-                           outstanding_list=outstanding_list, staff_count=staff_count,
-                           upcoming_exams=upcoming_exams, recent_activities=recent_activities,
-                           recent_activity_posts=recent_activity_posts,
-                           staff_leaves=staff_leaves, pass_rates=pass_rates,
-                           form_pass_rates=form_pass_rates, term=term, levies=levies)
+                           inactive_students=inactive_students)
 
 
 @app.route('/staff/admin/student/add', methods=['GET', 'POST'])
@@ -1042,61 +998,8 @@ def admin_delete_activity(id):
 @login_required
 @role_required('principal')
 def principal_dashboard():
-    staff = User.query.all()
     students = Student.query.order_by(Student.student_id).all()
-    student_fees = {}
-    for s in students:
-        fee = FeeAccount.query.filter_by(student_id=s.id).first()
-        payments = Payment.query.filter_by(student_id=s.id).order_by(Payment.created_at.desc()).all()
-        total_paid = sum(p.amount for p in payments)
-        student_fees[s.id] = {'fee': fee, 'payments': payments, 'total_paid': total_paid}
-
-    term = 'Term 1'
-    total_expected = db.session.query(db.func.sum(FeeAccount.total_fees)).filter_by(term=term).scalar() or 0
-    total_collected = db.session.query(db.func.sum(Payment.amount)).filter(Payment.cleared == True).scalar() or 0
-    fee_accounts = FeeAccount.query.filter_by(term=term).all()
-    outstanding = sum(fa.balance for fa in fee_accounts if fa.balance > 0)
-    outstanding_list = [fa for fa in fee_accounts if fa.balance > 0]
-
-    active_staff_count = User.query.filter(User.role != 'principal', User.is_active == True).count()
-    staff_on_leave = StaffLeave.query.filter(StaffLeave.status == 'Approved',
-                                              StaffLeave.end_date >= date.today()).count()
-
-    now_date = date.today()
-    upcoming_exams = ExamTimetable.query.filter(ExamTimetable.exam_date >= now_date).order_by(ExamTimetable.exam_date).limit(5).all()
-
-    recent_activities = ActivityLog.query.order_by(ActivityLog.created_at.desc()).limit(10).all()
-    recent_activity_posts = Activity.query.order_by(Activity.created_at.desc()).limit(10).all()
-
-    subjects = Subject.query.all()
-    pass_rates = []
-    for subj in subjects:
-        exams = ExamMark.query.filter_by(subject_id=subj.id, term=term).all()
-        if exams:
-            passed = sum(1 for e in exams if e.marks / e.total_marks * 100 >= 50)
-            pass_rates.append({'subject': subj.name, 'rate': round(passed / len(exams) * 100, 1), 'total': len(exams)})
-
-    form_pass_rates = []
-    forms = ['Form 1', 'Form 2', 'Form 3', 'Form 4', 'Form 5', 'Form 6']
-    for f in forms:
-        sids = [s.id for s in Student.query.filter_by(form=f).all()]
-        if sids:
-            exams = ExamMark.query.filter(ExamMark.student_id.in_(sids), ExamMark.term == term).all()
-            if exams:
-                passed = sum(1 for e in exams if e.marks / e.total_marks * 100 >= 50)
-                form_pass_rates.append({'form': f, 'rate': round(passed / len(exams) * 100, 1), 'total': len(exams)})
-
-    levies = LevyFund.query.filter_by(term=term).all()
-    zimsec_students = Student.query.filter_by(curriculum='ZIMSEC', is_active=True).count()
-
-    return render_template('staff/principal/dashboard.html', staff=staff, students=students,
-                           student_fees=student_fees, total_expected=total_expected,
-                           total_collected=total_collected, outstanding=outstanding,
-                           outstanding_list=outstanding_list, active_staff_count=active_staff_count,
-                           staff_on_leave=staff_on_leave, upcoming_exams=upcoming_exams,
-                           recent_activities=recent_activities, recent_activity_posts=recent_activity_posts,
-                           pass_rates=pass_rates, form_pass_rates=form_pass_rates, term=term, levies=levies,
-                           zimsec_students=zimsec_students)
+    return render_template('staff/principal/dashboard.html', students=students)
 
 
 @app.route('/staff/principal/student/<int:student_id>/results')
@@ -1402,6 +1305,19 @@ def student_dashboard():
     subjects = [ss.subject for ss in current_user.subjects if ss.subject]
     monthly_tests = MonthlyTest.query.filter_by(student_id=current_user.id).all()
     exam_marks_list = ExamMark.query.filter_by(student_id=current_user.id).all()
+
+    total_exams = len(exam_marks_list)
+    passed_exams = sum(1 for e in exam_marks_list if e.total_marks > 0 and (e.marks / e.total_marks * 100) >= 50)
+    pass_rate = round(passed_exams / total_exams * 100) if total_exams else 0
+
+    subject_pass_rates = []
+    for subj in subjects:
+        marks = [e for e in exam_marks_list if e.subject_id == subj.id]
+        if marks:
+            passed = sum(1 for e in marks if e.total_marks > 0 and (e.marks / e.total_marks * 100) >= 50)
+            subject_pass_rates.append({'subject': subj.name, 'rate': round(passed / len(marks) * 100),
+                                       'passed': passed, 'total': len(marks)})
+
     fee_account = FeeAccount.query.filter_by(student_id=current_user.id).first()
     payments = Payment.query.filter_by(student_id=current_user.id).order_by(Payment.created_at.desc()).limit(10).all()
     timetables = Timetable.query.filter_by(form=current_user.form).order_by(Timetable.day_of_week, Timetable.start_time).all()
@@ -1420,7 +1336,8 @@ def student_dashboard():
     return render_template('student/dashboard.html', subjects=subjects, monthly_tests=monthly_tests,
                          exam_marks=exam_marks_list, fee_account=fee_account, payments=payments,
                          timetables=timetables, exam_timetables=exam_timetables, subject_teachers=subject_teachers,
-                         teacher_remarks=teacher_remarks, recent_activity_posts=recent_activity_posts)
+                         teacher_remarks=teacher_remarks, recent_activity_posts=recent_activity_posts,
+                         pass_rate=pass_rate, subject_pass_rates=subject_pass_rates)
 
 
 @app.route('/student/results')
@@ -1433,6 +1350,18 @@ def student_results():
     subjects = [ss.subject for ss in current_user.subjects if ss.subject]
     monthly_tests = MonthlyTest.query.filter_by(student_id=current_user.id).all()
     exam_marks_list = ExamMark.query.filter_by(student_id=current_user.id).all()
+
+    total_exams = len(exam_marks_list)
+    passed_exams = sum(1 for e in exam_marks_list if e.total_marks > 0 and (e.marks / e.total_marks * 100) >= 50)
+    pass_rate = round(passed_exams / total_exams * 100) if total_exams else 0
+
+    subject_pass_rates = []
+    for subj in subjects:
+        marks = [e for e in exam_marks_list if e.subject_id == subj.id]
+        if marks:
+            passed = sum(1 for e in marks if e.total_marks > 0 and (e.marks / e.total_marks * 100) >= 50)
+            subject_pass_rates.append({'subject': subj.name, 'rate': round(passed / len(marks) * 100),
+                                       'passed': passed, 'total': len(marks)})
 
     principal_comments = PrincipalComment.query.filter_by(student_id=current_user.id).all()
     pc_by_key = {}
@@ -1465,7 +1394,8 @@ def student_results():
             'level': level, 'principal_comment': pc.comment if pc else None
         }
 
-    return render_template('student/results.html', results=results, fees_cleared=fees_cleared, fee_account=fee_account)
+    return render_template('student/results.html', results=results, fees_cleared=fees_cleared, fee_account=fee_account,
+                         pass_rate=pass_rate, subject_pass_rates=subject_pass_rates)
 
 
 @app.route('/student/finances')

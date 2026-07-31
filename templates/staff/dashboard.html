@@ -8,6 +8,7 @@
 <div class="row">
     {% if current_user.role == 'teacher' %}
     <div class="col-md-3">
+        <a href="{{ url_for('teacher_marks') }}" class="stat-link text-decoration-none">
         <div class="card stat-card bg-primary text-white">
             <div class="card-body">
                 <div class="stat-icon"><i class="bi bi-book"></i></div>
@@ -15,9 +16,10 @@
                 <p class="stat-label">Your Subject</p>
             </div>
         </div>
+        </a>
     </div>
     <div class="col-md-3">
-        <a href="{{ url_for('teacher_marks') }}" class="text-decoration-none">
+        <a href="{{ url_for('teacher_marks') }}" class="stat-link text-decoration-none">
         <div class="card stat-card bg-success text-white">
             <div class="card-body">
                 <div class="stat-icon"><i class="bi bi-pencil-square"></i></div>
@@ -28,16 +30,18 @@
         </a>
     </div>
     <div class="col-md-3">
+        <a href="{{ url_for('teacher_class') }}" class="stat-link text-decoration-none">
         <div class="card stat-card bg-info text-white">
             <div class="card-body">
                 <div class="stat-icon"><i class="bi bi-people-fill"></i></div>
-                <p class="stat-number"><a href="{{ url_for('teacher_class') }}" class="text-white">View Class</a></p>
+                <p class="stat-number">{{ stats.student_count }}</p>
                 <p class="stat-label">My Students</p>
             </div>
         </div>
+        </a>
     </div>
     <div class="col-md-3">
-        <a href="{{ url_for('staff_activities') }}" class="text-decoration-none">
+        <a href="{{ url_for('staff_activities') }}" class="stat-link text-decoration-none">
         <div class="card stat-card bg-warning text-white">
             <div class="card-body">
                 <div class="stat-icon"><i class="bi bi-list-check"></i></div>
@@ -50,6 +54,7 @@
 
     {% elif current_user.role == 'cashier' %}
     <div class="col-md-4">
+        <a href="{{ url_for('cashier_dashboard') }}" class="stat-link text-decoration-none">
         <div class="card stat-card bg-warning text-white">
             <div class="card-body">
                 <div class="stat-icon"><i class="bi bi-clock-history"></i></div>
@@ -57,8 +62,10 @@
                 <p class="stat-label">Pending Clearance</p>
             </div>
         </div>
+        </a>
     </div>
     <div class="col-md-4">
+        <a href="{{ url_for('cashier_dashboard') }}" class="stat-link text-decoration-none">
         <div class="card stat-card bg-success text-white">
             <div class="card-body">
                 <div class="stat-icon"><i class="bi bi-cash-stack"></i></div>
@@ -66,20 +73,23 @@
                 <p class="stat-label">Payments Today</p>
             </div>
         </div>
+        </a>
     </div>
     <div class="col-md-4">
+        <a href="{{ url_for('cashier_student_fees') }}" class="stat-link text-decoration-none">
         <div class="card stat-card bg-primary text-white">
             <div class="card-body">
                 <div class="stat-icon"><i class="bi bi-search"></i></div>
-                <p class="stat-number"><a href="{{ url_for('cashier_student_fees') }}" class="text-white">Search</a></p>
+                <p class="stat-number">Search</p>
                 <p class="stat-label">Find Student</p>
             </div>
         </div>
+        </a>
     </div>
 
     {% elif current_user.role == 'admin' %}
     <div class="col-md-4">
-        <a href="{{ url_for('admin_dashboard') }}" class="text-decoration-none">
+        <a href="{{ url_for('admin_dashboard') }}" class="stat-link text-decoration-none">
         <div class="card stat-card bg-primary text-white">
             <div class="card-body">
                 <div class="stat-icon"><i class="bi bi-people-fill"></i></div>
@@ -90,7 +100,7 @@
         </a>
     </div>
     <div class="col-md-4">
-        <a href="{{ url_for('admin_dashboard') }}" class="text-decoration-none">
+        <a href="{{ url_for('admin_dashboard') }}" class="stat-link text-decoration-none">
         <div class="card stat-card bg-success text-white">
             <div class="card-body">
                 <div class="stat-icon"><i class="bi bi-person-check"></i></div>
@@ -101,7 +111,7 @@
         </a>
     </div>
     <div class="col-md-4">
-        <a href="{{ url_for('admin_add_student') }}" class="text-decoration-none">
+        <a href="{{ url_for('admin_add_student') }}" class="stat-link text-decoration-none">
         <div class="card stat-card bg-info text-white">
             <div class="card-body">
                 <div class="stat-icon"><i class="bi bi-person-plus"></i></div>
@@ -114,7 +124,7 @@
 
     {% elif current_user.role == 'principal' %}
     <div class="col-md-3">
-        <a href="{{ url_for('principal_dashboard') }}#staff" class="text-decoration-none">
+        <a href="{{ url_for('principal_dashboard') }}#staff" class="stat-link text-decoration-none">
         <div class="card stat-card bg-primary text-white">
             <div class="card-body">
                 <div class="stat-icon"><i class="bi bi-people"></i></div>
@@ -125,7 +135,7 @@
         </a>
     </div>
     <div class="col-md-3">
-        <a href="{{ url_for('principal_dashboard') }}#students" class="text-decoration-none">
+        <a href="{{ url_for('principal_dashboard') }}#students" class="stat-link text-decoration-none">
         <div class="card stat-card bg-success text-white">
             <div class="card-body">
                 <div class="stat-icon"><i class="bi bi-mortarboard"></i></div>
@@ -136,7 +146,7 @@
         </a>
     </div>
     <div class="col-md-3">
-        <a href="{{ url_for('principal_dashboard') }}#students" class="text-decoration-none">
+        <a href="{{ url_for('principal_dashboard') }}#students" class="stat-link text-decoration-none">
         <div class="card stat-card bg-info text-white">
             <div class="card-body">
                 <div class="stat-icon"><i class="bi bi-person-check"></i></div>
@@ -147,7 +157,7 @@
         </a>
     </div>
     <div class="col-md-3">
-        <a href="{{ url_for('principal_timetables') }}" class="text-decoration-none">
+        <a href="{{ url_for('principal_timetables') }}" class="stat-link text-decoration-none">
         <div class="card stat-card bg-warning text-white">
             <div class="card-body">
                 <div class="stat-icon"><i class="bi bi-calendar-week"></i></div>

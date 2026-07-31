@@ -3,15 +3,54 @@
 {% block content %}
 <div class="page-header"><h3><i class="bi bi-file-earmark-text"></i> My Academic Results</h3></div>
 
-{% if not fees_cleared %}
+{% if fees_cleared %}
+<div class="alert alert-success">
+    <i class="bi bi-check-circle-fill"></i>
+    <strong>Fees Cleared!</strong> You have no outstanding balance. Your exam results are unlocked.
+</div>
+{% else %}
 <div class="alert alert-danger">
     <i class="bi bi-exclamation-triangle-fill"></i>
     <strong>Fees Not Cleared!</strong> You have an outstanding balance of <strong>${{ "%.2f"|format(fee_account.balance) if fee_account else '0.00' }}</strong>.
-    Please clear your fees at the cashier's office to view your results.
+    You can still view your monthly test results and pass rate, but your exam results are locked until fees are cleared.
 </div>
 {% endif %}
 
-{% if fees_cleared and results %}
+{% if not fees_cleared and subject_pass_rates %}
+<div class="card mb-3">
+    <div class="card-header"><h5 class="mb-0"><i class="bi bi-graph-up-arrow"></i> My Pass Rate</h5></div>
+    <div class="card-body">
+        <div class="row">
+            <div class="col-md-3">
+                <h6>Overall</h6>
+                <p class="display-6 fw-bold text-{{ 'success' if pass_rate >= 70 else 'warning' if pass_rate >= 50 else 'danger' }}">{{ pass_rate }}%</p>
+            </div>
+            <div class="col-md-9">
+                <h6>By Subject</h6>
+                <div class="table-responsive">
+                <table class="table table-sm">
+                    <tbody>
+                        {% for pr in subject_pass_rates %}
+                        <tr>
+                            <td><strong>{{ pr.subject }}</strong></td>
+                            <td style="width:55%">
+                                <div class="progress" style="height:18px;">
+                                    <div class="progress-bar {% if pr.rate >= 50 %}bg-success{% else %}bg-danger{% endif %}" style="width:{{ pr.rate }}%">{{ pr.rate }}%</div>
+                                </div>
+                            </td>
+                            <td>{{ pr.passed }}/{{ pr.total }} passed</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+{% if results %}
 <div class="row">
     {% for subject_name, data in results.items() %}
     <div class="col-md-6 mb-4">
@@ -22,7 +61,7 @@
                 </h5>
             </div>
             <div class="card-body">
-                {% if data.monthly or data.exam %}
+                {% if data.monthly or (fees_cleared and data.exam) %}
                 <h6><i class="bi bi-calendar-check"></i> Current Term Results</h6>
                 {% if data.monthly %}
                 <div class="table-responsive">
@@ -44,7 +83,7 @@
                 </div>
                 {% else %}<p class="text-muted">No monthly tests yet.</p>{% endif %}
 
-                {% if data.exam %}
+                {% if fees_cleared and data.exam %}
                 <div class="table-responsive">
                 <table class="table table-sm table-bordered">
                     <thead><tr><th>Term</th><th>Exam</th><th>Marks</th><th>%</th><th>Grade</th><th>Teacher Comment</th></tr></thead>
@@ -62,9 +101,11 @@
                     </tbody>
                 </table>
                 </div>
+                {% elif not fees_cleared and data.exam %}
+                <div class="alert alert-warning py-2"><i class="bi bi-lock-fill"></i> Exam results are locked until your fees are cleared.</div>
                 {% else %}<p class="text-muted">No exams yet.</p>{% endif %}
 
-                {% if data.prev_monthly or data.prev_exam %}
+                {% if data.prev_monthly or (fees_cleared and data.prev_exam) %}
                 <hr>
                 <h6><i class="bi bi-archive"></i> Previous Year Results</h6>
                 {% if data.prev_monthly %}
@@ -84,7 +125,7 @@
                 </table>
                 </div>
                 {% endif %}
-                {% if data.prev_exam %}
+                {% if fees_cleared and data.prev_exam %}
                 <div class="table-responsive">
                 <table class="table table-sm table-bordered">
                     <thead><tr><th>Year</th><th>Term</th><th>Exam</th><th>Marks</th><th>Grade</th><th>Comment</th></tr></thead>
