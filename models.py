@@ -307,3 +307,25 @@ class LevyFund(db.Model):
     @property
     def balance(self):
         return self.total_amount - self.amount_collected
+
+
+class OTPCode(db.Model):
+    __tablename__ = 'otp_codes'
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_type = db.Column(db.String(10), nullable=False)
+    user_id = db.Column(db.Integer, nullable=False)
+    phone = db.Column(db.String(20), nullable=False)
+    code = db.Column(db.String(6), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    expires_at = db.Column(db.DateTime, nullable=False)
+    used = db.Column(db.Boolean, default=False)
+    attempts = db.Column(db.Integer, default=0)
+    request_count = db.Column(db.Integer, default=1)
+    request_window_start = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def is_expired(self):
+        return datetime.utcnow() > self.expires_at
+
+    def is_rate_limited(self):
+        return self.request_count >= 3 and (datetime.utcnow() - self.request_window_start).total_seconds() < 900

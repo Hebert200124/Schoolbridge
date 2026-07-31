@@ -1,30 +1,29 @@
 {% extends "base.html" %}
-{% block title %}Verify Code - SchoolBridge{% endblock %}
+{% block title %}Verify OTP - SchoolBridge{% endblock %}
 {% block content %}
 <div class="login-container">
     <div class="card login-card">
         <div class="login-header">
-            <h2><i class="bi bi-shield-lock"></i> Verify Code</h2>
-            <p class="mb-0 opacity-75">Enter the 6-digit verification code sent to your phone</p>
+            <h2><i class="bi bi-shield-lock"></i> Verify OTP</h2>
+            <p class="mb-0 opacity-75">Enter the 6-digit code sent to your phone</p>
         </div>
         <div class="card-body p-4">
-            {% if code %}
-            <div class="text-center mb-4 p-3 bg-light rounded">
-                <p class="text-muted mb-1">Verification code (simulated SMS):</p>
-                <div class="display-4 fw-bold text-primary" style="letter-spacing: 8px;">{{ code }}</div>
-                <p class="text-muted mt-2 mb-0"><small>This code expires in 1 hour.</small></p>
-            </div>
-            {% endif %}
             <form method="POST" action="{{ url_for('auth_reset_code') }}">
                 <div class="mb-3">
-                    <label class="form-label">Verification Code</label>
-                    <input type="text" class="form-control" name="code" required placeholder="Enter the 6-digit code" maxlength="6">
+                    <label class="form-label">One-Time Password (OTP)</label>
+                    <input type="text" class="form-control text-center fs-4 fw-bold" name="code" required
+                           placeholder="000000" maxlength="6" inputmode="numeric" pattern="[0-9]{6}"
+                           autocomplete="one-time-code">
+                    <div class="form-text text-center">Enter the 6-digit code sent via SMS. It expires in 10 minutes.</div>
                 </div>
-                <button type="submit" class="btn btn-primary w-100"><i class="bi bi-check-circle"></i> Verify Code</button>
+                <button type="submit" class="btn btn-primary w-100"><i class="bi bi-check-circle"></i> Verify OTP</button>
             </form>
             <hr class="my-4">
             <div class="text-center">
-                <a href="{{ url_for('auth_reset_password') }}"><i class="bi bi-arrow-left"></i> Request New Code</a>
+                <a href="{{ url_for('auth_reset_password') }}" class="btn btn-outline-secondary w-100"><i class="bi bi-arrow-counterclockwise"></i> Resend OTP</a>
+            </div>
+            <div class="text-center mt-2">
+                <a href="{{ url_for('auth_login') }}"><i class="bi bi-arrow-left"></i> Back to Login</a>
             </div>
         </div>
     </div>

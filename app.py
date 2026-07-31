@@ -1,6 +1,6 @@
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
-from models import db, User, Student, Subject, StudentSubject, MonthlyTest, ExamMark, FeeAccount, Payment, FeeSetting, Timetable, ExamTimetable, PrincipalComment, TeacherRemark, ActivityLog, Activity, StaffLeave, LevyFund, zim_grade
+from models import db, User, Student, Subject, StudentSubject, MonthlyTest, ExamMark, FeeAccount, Payment, FeeSetting, Timetable, ExamTimetable, PrincipalComment, TeacherRemark, ActivityLog, Activity, StaffLeave, LevyFund, OTPCode, zim_grade
 from config import Config
 from functools import wraps
 from datetime import datetime, date, timedelta
@@ -211,25 +211,113 @@ def find_person_by_reg_and_phone(reg_raw, phone_raw):
             return p
     return None
 
+
+def send_sms(phone, message):
+    """Send SMS via Africa's Talking SDK. Also logs to console for debugging."""
+    api_key = os.environ.get('AT_API_KEY', '')
+    username = os.environ.get('AT_USERNAME', '')
+    sender_id = os.environ.get('AT_SENDER_ID', 'SchoolBridge')
+
+    app.logger.info(f'[SMS] To: {phone} | Message: {message}')
+
+    if not api_key or not username:
+        app.logger.warning('SMS not sent: AT_API_KEY or AT_USERNAME not set')
+        return True
+
+    try:
+        import africastalking
+        africastalking.initialize(username, api_key)
+        sms = africastalking.SMS
+        resp = sms.send(message, [phone], sender_id)
+        app.logger.info(f'[SMS] Africa\'s Talking response: {resp}')
+        return resp.get('SMSMessageData', {}).get('Recipients', [{}])[0].get('status', '') == 'Success'
+    except ImportError:
+        try:
+            import requests
+            resp = requests.post(
+                'https://api.africastalking.com/version1/messaging',
+                data={
+                    'username': username,
+                    'to': phone,
+                    'message': message,
+                    'from': sender_id,
+                },
+                headers={'ApiKey': api_key, 'Content-Type': 'application/x-www-form-urlencoded'},
+                timeout=10
+            )
+            app.logger.info(f'[SMS] Direct API response: {resp.status_code} {resp.text}')
+            return resp.ok
+        except Exception as e:
+            app.logger.exception(f'[SMS] Direct API call failed: {e}')
+            return False
+    except Exception as e:
+        app.logger.exception(f'[SMS] SDK call failed: {e}')
+        return False
+
 @app.route('/auth/reset-password', methods=['GET', 'POST'])
 def auth_reset_password():
     if request.method == 'POST':
         reg_number = request.form.get('reg_number', '').strip()
         phone = request.form.get('phone', '').strip()
+        phone_normalized = normalize_phone(phone)
 
         person = find_person_by_reg_and_phone(reg_number, phone)
+
         if not person:
-            flash('Registration number/Student ID and phone number do not match our records.', 'danger')
-            return render_template('auth/reset_password.html', debug_reg=reg_number, debug_phone=phone)
+            flash('If those details match our records, an OTP has been sent to your phone.', 'info')
+            return redirect(url_for('auth_reset_password'))
 
-        reset_code = str(random.randint(100000, 999999))
-        session['reset_phone'] = phone
-        session['reset_code'] = reset_code
-        session['reset_expiry'] = (datetime.now() + timedelta(hours=1)).timestamp()
-        session['reset_user_type'] = 'User' if isinstance(person, User) else 'Student'
-        session['reset_user_id'] = person.id
+        user_type = 'User' if isinstance(person, User) else 'Student'
+        user_id = person.id
 
-        flash(f'Your 6-digit verification code is: {reset_code}', 'info')
+        latest = OTPCode.query.filter_by(
+            user_type=user_type, user_id=user_id, used=False
+        ).order_by(OTPCode.created_at.desc()).first()
+
+        if latest and latest.is_rate_limited():
+            remaining = int(900 - (datetime.utcnow() - latest.request_window_start).total_seconds())
+            flash(f'Too many OTP requests. Try again in {remaining // 60} minute(s).', 'danger')
+            return redirect(url_for('auth_reset_password'))
+
+        if latest and (datetime.utcnow() - latest.created_at).total_seconds() < 60:
+            flash('Please wait at least 1 minute before requesting a new OTP.', 'warning')
+            return redirect(url_for('auth_reset_password'))
+
+        code = f'{random.randint(0, 999999):06d}'
+        now = datetime.utcnow()
+
+        if latest:
+            latest.request_count += 1
+            otp = latest
+        else:
+            otp = OTPCode(
+                user_type=user_type, user_id=user_id,
+                phone=phone_normalized, code=code,
+                created_at=now, expires_at=now + timedelta(minutes=10),
+                request_window_start=now
+            )
+            db.session.add(otp)
+
+        otp.code = code
+        otp.created_at = now
+        otp.expires_at = now + timedelta(minutes=10)
+        otp.used = False
+        otp.attempts = 0
+
+        db.session.commit()
+
+        message = f'SchoolBridge: Your OTP is {code}. It expires in 10 minutes. Do not share this code.'
+        send_sms(phone_normalized, message)
+
+        if app.debug:
+            flash(f'[DEV] OTP for {phone_normalized}: {code}', 'info')
+
+        session['reset_otp_id'] = otp.id
+        session['reset_phone'] = phone_normalized
+        session['reset_user_type'] = user_type
+        session['reset_user_id'] = user_id
+
+        flash('A 6-digit OTP has been sent to your phone.', 'success')
         return redirect(url_for('auth_reset_code'))
 
     return render_template('auth/reset_password.html')
@@ -237,47 +325,49 @@ def auth_reset_password():
 
 @app.route('/auth/reset-code', methods=['GET', 'POST'])
 def auth_reset_code():
-    phone = session.get('reset_phone')
-    expected_code = session.get('reset_code')
-    expiry = session.get('reset_expiry')
-
-    if not all([session.get(k) for k in ('reset_phone', 'reset_code', 'reset_expiry', 'reset_user_type', 'reset_user_id')]):
-        flash('No reset session found. Please request a password reset first.', 'warning')
+    otp_id = session.get('reset_otp_id')
+    if not otp_id:
+        flash('Please request a password reset first.', 'warning')
         return redirect(url_for('auth_reset_password'))
 
-    if datetime.now().timestamp() > expiry:
-        session.pop('reset_phone', None)
-        session.pop('reset_code', None)
-        session.pop('reset_expiry', None)
-        session.pop('reset_user_type', None)
-        session.pop('reset_user_id', None)
-        flash('Reset code has expired. Please request a new one.', 'danger')
+    otp = OTPCode.query.get(otp_id)
+    if not otp or otp.used:
+        flash('OTP has already been used. Please request a new one.', 'warning')
+        return redirect(url_for('auth_reset_password'))
+
+    if otp.is_expired():
+        flash('OTP has expired. Please request a new one.', 'danger')
         return redirect(url_for('auth_reset_password'))
 
     if request.method == 'POST':
         code = request.form.get('code', '').strip()
 
-        if code != expected_code:
-            flash('Invalid verification code.', 'danger')
-            return render_template('auth/reset_code.html', code=expected_code)
+        if otp.attempts >= 5:
+            flash('Too many failed attempts. Please request a new OTP.', 'danger')
+            return redirect(url_for('auth_reset_password'))
 
+        if code != otp.code:
+            otp.attempts += 1
+            db.session.commit()
+            remaining = 5 - otp.attempts
+            flash(f'Invalid OTP. {remaining} attempt(s) remaining.', 'danger')
+            return render_template('auth/reset_code.html')
+
+        otp.used = True
+        db.session.commit()
         session['reset_code_verified'] = True
+
+        flash('OTP verified. Please set your new password.', 'success')
         return redirect(url_for('auth_reset_set_password'))
 
-    return render_template('auth/reset_code.html', code=expected_code)
+    return render_template('auth/reset_code.html')
 
 
 @app.route('/auth/reset-set-password', methods=['GET', 'POST'])
 def auth_reset_set_password():
     if not session.get('reset_code_verified'):
-        flash('Please verify your code first.', 'warning')
+        flash('Please verify your OTP first.', 'warning')
         return redirect(url_for('auth_reset_code'))
-
-    if datetime.now().timestamp() > session.get('reset_expiry', 0):
-        for k in ('reset_phone', 'reset_code', 'reset_expiry', 'reset_user_type', 'reset_user_id', 'reset_code_verified'):
-            session.pop(k, None)
-        flash('Reset session has expired. Please start over.', 'danger')
-        return redirect(url_for('auth_reset_password'))
 
     if request.method == 'POST':
         new_password = request.form.get('new_password', '')
@@ -303,7 +393,7 @@ def auth_reset_set_password():
                 student.set_password(new_password)
         db.session.commit()
 
-        for k in ('reset_phone', 'reset_code', 'reset_expiry', 'reset_user_type', 'reset_user_id', 'reset_code_verified'):
+        for k in ('reset_otp_id', 'reset_phone', 'reset_user_type', 'reset_user_id', 'reset_code_verified'):
             session.pop(k, None)
 
         flash('Password reset successfully! You can now log in.', 'success')
