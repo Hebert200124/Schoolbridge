@@ -1,6 +1,5 @@
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
-from flask_mail import Mail, Message
 from models import db, User, Student, Subject, StudentSubject, MonthlyTest, ExamMark, FeeAccount, Payment, FeeSetting, Timetable, ExamTimetable, PrincipalComment, TeacherRemark, ActivityLog, Activity, StaffLeave, LevyFund, OTPCode, zim_grade
 from config import Config
 from functools import wraps
@@ -8,13 +7,13 @@ from datetime import datetime, date, timedelta
 import os
 import random
 import string
+import sib_api_v3_sdk
+from sib_api_v3_sdk.rest import ApiException
 
 app = Flask(__name__)
 app.config.from_object(Config)
 app.jinja_env.auto_reload = True
 app.config['TEMPLATES_AUTO_RELOAD'] = True
-
-mail = Mail(app)
 
 db.init_app(app)
 with app.app_context():
@@ -181,13 +180,13 @@ def auth_change_password():
 
 
 def send_otp_email(to_email, otp_code, expires_minutes=10):
-    """Send the OTP code to the user's email via Flask-Mail."""
+    """Send the OTP code to the user's email via Brevo transactional email API."""
     try:
-        msg = Message(
-            subject='SchoolBridge: Your Password Reset OTP',
-            recipients=[to_email],
-        )
-        msg.html = f"""
+        configuration = sib_api_v3_sdk.Configuration()
+        configuration.api_key['api-key'] = app.config['BREVO_API_KEY']
+        api_instance = sib_api_v3_sdk.TransactionalEmailsApi(sib_api_v3_sdk.ApiClient(configuration))
+
+        html_content = f"""
         <div style="font-family:Arial,Helvetica,sans-serif;max-width:480px;margin:0 auto;border:1px solid #E2E8F0;border-radius:10px;overflow:hidden;">
             <div style="background:#334E68;color:#ffffff;padding:24px;text-align:center;">
                 <h2 style="margin:0;">SchoolBridge</h2>
@@ -201,11 +200,22 @@ def send_otp_email(to_email, otp_code, expires_minutes=10):
             </div>
         </div>
         """
-        mail.send(msg)
-        app.logger.info(f'[MAIL] OTP sent to: {to_email}')
+
+        send_smtp_email = sib_api_v3_sdk.SendSmtpEmail(
+            to=[{'email': to_email}],
+            sender={'name': 'SchoolBridge', 'email': app.config['MAIL_DEFAULT_SENDER']},
+            subject='SchoolBridge: Your Password Reset OTP',
+            html_content=html_content
+        )
+        api_instance.send_transac_email(send_smtp_email)
+        app.logger.info(f'[BREVO] OTP sent to: {to_email}')
         return True
+    except ApiException as e:
+        app.logger.error(f'[BREVO] Failed to send OTP email to {to_email}: {e}')
+        app.logger.error(f'[BREVO] Response body: {e.body}')
+        return False
     except Exception as e:
-        app.logger.exception(f'[MAIL] Failed to send OTP email: {e}')
+        app.logger.error(f'[BREVO] Unexpected error sending OTP email to {to_email}: {e}')
         return False
 
 
