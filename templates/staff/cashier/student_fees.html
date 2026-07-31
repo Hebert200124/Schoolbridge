@@ -48,6 +48,12 @@
                 </div>
                 {% else %}
                 <p class="text-muted">No fee account set up.</p>
+                {% if detected_fee and detected_fee > 0 %}
+                <div class="alert alert-info py-2">
+                    <i class="bi bi-info-circle"></i> Fee for {{ student.form }} is set at
+                    <strong>${{ "%.2f"|format(detected_fee) }}</strong>. Record a payment or set fees to create the account.
+                </div>
+                {% endif %}
                 {% endif %}
             </div>
         </div>
@@ -67,7 +73,7 @@
                     </div>
                     <div class="mb-2">
                         <label class="form-label">Total Fees ($)</label>
-                        <input type="number" class="form-control" name="total_fees" step="0.01" value="{{ fee_account.total_fees if fee_account else '' }}" required>
+                        <input type="number" class="form-control" name="total_fees" step="0.01" value="{{ "%.2f"|format(fee_account.total_fees if fee_account else detected_fee or 0) }}" required>
                     </div>
                     <button type="submit" class="btn btn-warning w-100"><i class="bi bi-save"></i> Set/Update Fees</button>
                 </form>

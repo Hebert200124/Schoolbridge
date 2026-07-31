@@ -72,6 +72,34 @@ def generate_receipt():
             return ref
 
 
+def get_current_term():
+    return 'Term 1'
+
+
+def get_term_fee(form):
+    fs = FeeSetting.query.filter_by(form=form).first()
+    return fs.term_fee if fs else 0.0
+
+
+def get_detected_fee(student, term=None):
+    term = term or get_current_term()
+    fee_account = FeeAccount.query.filter_by(student_id=student.id, term=term).first()
+    if fee_account:
+        return fee_account.total_fees
+    return get_term_fee(student.form)
+
+
+def ensure_fee_account(student, term=None, amount_paid=0.0):
+    term = term or get_current_term()
+    fee_account = FeeAccount.query.filter_by(student_id=student.id, term=term).first()
+    if not fee_account:
+        total = get_term_fee(student.form)
+        fee_account = FeeAccount(student_id=student.id, term=term,
+                                 total_fees=total, amount_paid=amount_paid, balance=total - amount_paid)
+        db.session.add(fee_account)
+    return fee_account
+
+
 @login_manager.user_loader
 def load_user(user_id):
     if user_id.startswith('student_'):
@@ -723,6 +751,7 @@ def cashier_student_fees():
     student = None
     fee_account = None
     payments = []
+    detected_fee = None
 
     if request.method == 'POST':
         student_id = request.form.get('student_id')
@@ -732,8 +761,10 @@ def cashier_student_fees():
         else:
             fee_account = FeeAccount.query.filter_by(student_id=student.id).first()
             payments = Payment.query.filter_by(student_id=student.id).order_by(Payment.created_at.desc()).all()
+            detected_fee = get_detected_fee(student)
 
-    return render_template('staff/cashier/student_fees.html', student=student, fee_account=fee_account, payments=payments)
+    return render_template('staff/cashier/student_fees.html', student=student, fee_account=fee_account,
+                           payments=payments, detected_fee=detected_fee)
 
 
 @app.route('/staff/cashier/payment/add', methods=['POST'])
@@ -762,6 +793,8 @@ def cashier_add_payment():
     if fee_account:
         fee_account.amount_paid += amount
         fee_account.balance = fee_account.total_fees - fee_account.amount_paid
+    else:
+        ensure_fee_account(student, amount_paid=amount)
 
     db.session.commit()
     log_activity('Payment recorded', f'${amount:.2f} for {student.full_name} ({student.reg_number})', user=current_user, student=student)
@@ -856,6 +889,11 @@ def admin_add_student():
             ss = StudentSubject(student_id=student.id, subject_id=int(sid))
             db.session.add(ss)
 
+        term_fee = get_term_fee(form)
+        if term_fee > 0:
+            db.session.add(FeeAccount(student_id=student.id, term=get_current_term(),
+                                      total_fees=term_fee, amount_paid=0.0, balance=term_fee))
+
         db.session.commit()
         log_activity('New student registered', f'{first_name} {last_name} ({reg_number})', user=current_user)
         flash(f'Student {first_name} {last_name} added. ID: {student_id}, Reg: {reg_number}', 'success')
@@ -869,6 +907,7 @@ def admin_add_student():
 @role_required('admin')
 def admin_edit_student(student_id):
     student = Student.query.get_or_404(student_id)
+    original_form = student.form
     subjects = Subject.query.all()
     enrolled_ids = [ss.subject_id for ss in student.subjects]
     o_level = [s for s in subjects if s.level == 'O']
@@ -888,6 +927,14 @@ def admin_edit_student(student_id):
         for sid in request.form.getlist('subjects'):
             ss = StudentSubject(student_id=student.id, subject_id=int(sid))
             db.session.add(ss)
+
+        if student.form != original_form:
+            fee_account = FeeAccount.query.filter_by(student_id=student.id, term=get_current_term()).first()
+            if fee_account:
+                new_fee = get_term_fee(student.form)
+                if new_fee > 0:
+                    fee_account.total_fees = new_fee
+                    fee_account.balance = new_fee - fee_account.amount_paid
 
         db.session.commit()
         flash('Student updated.', 'success')
@@ -1230,12 +1277,13 @@ def principal_delete_fee_setting(fs_id):
 def principal_edit_student_fees(student_id):
     student = Student.query.get_or_404(student_id)
     fee_account = FeeAccount.query.filter_by(student_id=student.id).first()
+    default_fee = fee_account.total_fees if fee_account else get_term_fee(student.form)
 
     if request.method == 'POST':
         total_fees = float(request.form.get('total_fees', 0))
         amount_paid = float(request.form.get('amount_paid', 0))
         if not fee_account:
-            fee_account = FeeAccount(student_id=student.id, term='Term 1')
+            fee_account = FeeAccount(student_id=student.id, term=get_current_term())
             db.session.add(fee_account)
         fee_account.total_fees = total_fees
         fee_account.amount_paid = amount_paid
@@ -1244,7 +1292,7 @@ def principal_edit_student_fees(student_id):
         flash(f'Fees updated for {student.full_name}.', 'success')
         return redirect(url_for('principal_dashboard'))
 
-    return render_template('staff/principal/edit_fees.html', student=student, fee_account=fee_account)
+    return render_template('staff/principal/edit_fees.html', student=student, fee_account=fee_account, default_fee=default_fee)
 
 
 # ============ EXPORT ROUTES ============
