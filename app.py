@@ -1603,6 +1603,28 @@ def setup():
     return 'System setup complete! <a href="/auth/login">Login</a>'
 
 
+def _migrate_a_level_math_subjects():
+    a_math = Subject.query.filter_by(code='MATH-A').first()
+    if not a_math:
+        a_math = Subject.query.filter_by(level='A', name='Mathematics').first()
+    if a_math and not Subject.query.filter_by(code='MATH-PURE').first():
+        a_math.name = 'Pure Mathematics'
+        a_math.code = 'MATH-PURE'
+    existing = {s.name for s in Subject.query.filter_by(level='A').all()}
+    for name, code in (('Statistics', 'MATH-STAT'), ('Mechanics', 'MATH-MECH'), ('Further Mathematics', 'MATH-FURTHER')):
+        if name not in existing:
+            db.session.add(Subject(name=name, code=code, level='A'))
+    db.session.commit()
+
+
+with app.app_context():
+    try:
+        _migrate_a_level_math_subjects()
+    except Exception as exc:
+        db.session.rollback()
+        print(f'[migration] A-Level math subject update skipped: {exc}')
+
+
 if __name__ == '__main__':
     with app.app_context():
         db.create_all()
