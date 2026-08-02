@@ -1363,10 +1363,21 @@ def principal_toggle_student_status(student_id):
     return redirect(url_for('principal_dashboard'))
 
 
+def _block_super_admin():
+    """Timetable management is reserved for campus principals."""
+    if getattr(current_user, 'role', '') == 'super_admin':
+        flash('Timetable management is not available for super admin.', 'danger')
+        return redirect(url_for('super_admin_dashboard'))
+    return None
+
+
 @app.route('/staff/principal/timetables')
 @login_required
 @role_required('principal')
 def principal_timetables():
+    blocked = _block_super_admin()
+    if blocked:
+        return blocked
     subjects = scoped(Subject).all()
     teachers = scoped(User).filter_by(role='teacher').all()
     timetables = scoped(Timetable).order_by(Timetable.form, Timetable.day_of_week, Timetable.start_time).all()
@@ -1378,6 +1389,9 @@ def principal_timetables():
 @login_required
 @role_required('principal')
 def principal_add_timetable():
+    blocked = _block_super_admin()
+    if blocked:
+        return blocked
     tt = Timetable(
         form=request.form.get('form'), day_of_week=request.form.get('day_of_week'),
         subject_id=int(request.form.get('subject_id')), start_time=request.form.get('start_time'),
@@ -1394,6 +1408,9 @@ def principal_add_timetable():
 @login_required
 @role_required('principal')
 def principal_add_exam_timetable():
+    blocked = _block_super_admin()
+    if blocked:
+        return blocked
     ett = ExamTimetable(
         form=request.form.get('form'), subject_id=int(request.form.get('subject_id')),
         exam_date=datetime.strptime(request.form.get('exam_date'), '%Y-%m-%d').date(),
@@ -1410,6 +1427,9 @@ def principal_add_exam_timetable():
 @login_required
 @role_required('principal')
 def principal_delete_timetable(tt_id):
+    blocked = _block_super_admin()
+    if blocked:
+        return blocked
     db.session.delete(scoped_get_or_404(Timetable, tt_id))
     db.session.commit()
     flash('Timetable entry deleted.', 'success')
@@ -1420,6 +1440,9 @@ def principal_delete_timetable(tt_id):
 @login_required
 @role_required('principal')
 def principal_delete_exam_timetable(ett_id):
+    blocked = _block_super_admin()
+    if blocked:
+        return blocked
     db.session.delete(scoped_get_or_404(ExamTimetable, ett_id))
     db.session.commit()
     flash('Exam timetable entry deleted.', 'success')
