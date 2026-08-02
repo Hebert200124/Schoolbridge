@@ -139,6 +139,12 @@ def log_activity(action, description=None, user=None, student=None, visibility='
     db.session.commit()
 
 
+def staff_email(username, email):
+    """Users require a non-null, unique email; generate a placeholder when blank."""
+    email = (email or '').strip()
+    return email if email else f'{username.lower()}@schoolbridge.local'
+
+
 def generate_receipt():
     while True:
         ref = 'RCP' + ''.join(random.choices(string.digits, k=8))
@@ -1462,7 +1468,7 @@ def principal_add_staff():
                 return redirect(url_for('principal_add_staff'))
 
         user = User(
-            username=username, email=email, role=role, full_name=full_name,
+            username=username, email=staff_email(username, email), role=role, full_name=full_name,
             phone=phone, reg_number=reg_number,
             subject_id=int(subject_id) if subject_id and role == 'teacher' else None,
             campus_id=target_campus_id
@@ -1497,7 +1503,7 @@ def principal_edit_staff(staff_id):
 
     if request.method == 'POST':
         staff_member.full_name = request.form.get('full_name')
-        staff_member.email = request.form.get('email')
+        staff_member.email = staff_email(staff_member.username, request.form.get('email'))
         staff_member.phone = request.form.get('phone')
         staff_member.role = request.form.get('role')
         staff_member.subject_id = int(request.form.get('subject_id')) if request.form.get('subject_id') and request.form.get('role') == 'teacher' else None
@@ -2046,7 +2052,7 @@ def super_admin_campus_staff(campus_id):
         if role == 'teacher' and not subject_id:
             flash('Please select the subject the teacher teaches.', 'danger')
             return redirect(url_for('super_admin_campus_staff', campus_id=campus.id))
-        user = User(username=username, email=email or None, role=role, full_name=full_name,
+        user = User(username=username, email=staff_email(username, email), role=role, full_name=full_name,
                     phone=phone or None, reg_number=f'STF{username.upper()}', campus_id=campus.id,
                     subject_id=int(subject_id) if subject_id and role == 'teacher' else None)
         user.set_password(password)
