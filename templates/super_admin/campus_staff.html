@@ -27,11 +27,20 @@
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Role</label>
-                        <select class="form-select" name="role" required>
+                        <select class="form-select" name="role" id="staffRole" required>
                             <option value="principal">Principal</option>
                             <option value="admin">Admin</option>
                             <option value="cashier">Cashier</option>
                             <option value="teacher">Teacher</option>
+                        </select>
+                    </div>
+                    <div class="mb-3" id="subjectGroup">
+                        <label class="form-label">Subject</label>
+                        <select class="form-select" name="subject_id">
+                            <option value="">-- Select Subject --</option>
+                            {% for subj in subjects %}
+                            <option value="{{ subj.id }}">{{ subj.name }} ({{ subj.level }})</option>
+                            {% endfor %}
                         </select>
                     </div>
                     <div class="mb-3">
@@ -59,7 +68,7 @@
                 <div class="table-responsive">
                     <table class="table table-hover">
                         <thead>
-                            <tr><th>Name</th><th>Username</th><th>Role</th><th>Email</th><th>Phone</th><th>Actions</th></tr>
+                            <tr><th>Name</th><th>Username</th><th>Role</th><th>Subject</th><th>Email</th><th>Phone</th><th>Actions</th></tr>
                         </thead>
                         <tbody>
                             {% for s in staff %}
@@ -67,6 +76,7 @@
                                 <td>{{ s.full_name }}</td>
                                 <td><small>{{ s.username }}</small></td>
                                 <td><span class="badge bg-secondary">{{ s.role|title }}</span></td>
+                                <td>{% if s.teacher_subject %}<span class="badge bg-primary">{{ s.teacher_subject.name }}</span>{% else %}<small class="text-muted">-</small>{% endif %}</td>
                                 <td><small>{{ s.email or '-' }}</small></td>
                                 <td><small>{{ s.phone or '-' }}</small></td>
                                 <td>
@@ -86,4 +96,9 @@
         </div>
     </div>
 </div>
+<script>
+document.getElementById('staffRole').addEventListener('change', function() {
+    document.getElementById('subjectGroup').style.display = this.value === 'teacher' ? '' : 'none';
+});
+</script>
 {% endblock %}

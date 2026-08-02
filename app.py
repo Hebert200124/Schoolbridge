@@ -1995,6 +1995,7 @@ def super_admin_campus_staff(campus_id):
         role = request.form.get('role')
         full_name = request.form.get('full_name')
         phone = request.form.get('phone')
+        subject_id = request.form.get('subject_id')
         if not username or not full_name:
             flash('Username and full name are required.', 'danger')
             return redirect(url_for('super_admin_campus_staff', campus_id=campus.id))
@@ -2005,8 +2006,12 @@ def super_admin_campus_staff(campus_id):
         if errors:
             flash(errors[0], 'danger')
             return redirect(url_for('super_admin_campus_staff', campus_id=campus.id))
+        if role == 'teacher' and not subject_id:
+            flash('Please select the subject the teacher teaches.', 'danger')
+            return redirect(url_for('super_admin_campus_staff', campus_id=campus.id))
         user = User(username=username, email=email or None, role=role, full_name=full_name,
-                    phone=phone or None, reg_number=f'STF{username.upper()}', campus_id=campus.id)
+                    phone=phone or None, reg_number=f'STF{username.upper()}', campus_id=campus.id,
+                    subject_id=int(subject_id) if subject_id and role == 'teacher' else None)
         user.set_password(password)
         db.session.add(user)
         db.session.commit()
@@ -2015,7 +2020,8 @@ def super_admin_campus_staff(campus_id):
         return redirect(url_for('super_admin_campus_staff', campus_id=campus.id))
 
     staff = User.query.filter(User.campus_id == campus.id, User.role != 'super_admin').order_by(User.full_name).all()
-    return render_template('super_admin/campus_staff.html', campus=campus, staff=staff)
+    subjects = Subject.query.filter_by(campus_id=campus.id).order_by(Subject.name).all()
+    return render_template('super_admin/campus_staff.html', campus=campus, staff=staff, subjects=subjects)
 
 
 @app.route('/super-admin/campuses/<int:campus_id>/staff/fire/<int:staff_id>', methods=['POST'])
