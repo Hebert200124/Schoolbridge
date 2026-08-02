@@ -1984,6 +1984,9 @@ def super_admin_add_campus():
         return redirect(url_for('super_admin_campuses'))
     db.session.add(Campus(name=name, code=code, address=address))
     db.session.commit()
+    new_campus = Campus.query.filter_by(code=code).first()
+    if new_campus is not None:
+        seed_campus_subjects(new_campus.id)
     log_activity('Campus created', f'{name} ({code})', user=current_user)
     flash(f'Campus {name} ({code}) created.', 'success')
     return redirect(url_for('super_admin_campuses'))
@@ -2054,7 +2057,8 @@ def super_admin_campus_staff(campus_id):
         return redirect(url_for('super_admin_campus_staff', campus_id=campus.id))
 
     staff = User.query.filter(User.campus_id == campus.id, User.role != 'super_admin').order_by(User.full_name).all()
-    subjects = Subject.query.order_by(Subject.name).all()
+    seed_campus_subjects(campus.id)
+    subjects = Subject.query.filter_by(campus_id=campus.id).order_by(Subject.name).all()
     return render_template('super_admin/campus_staff.html', campus=campus, staff=staff, subjects=subjects)
 
 
@@ -2079,6 +2083,41 @@ def super_admin_fire_staff(campus_id, staff_id):
 
 # ============ SEED DATA ============
 
+DEFAULT_O_LEVEL_SUBJECTS = [
+    ('Mathematics', 'MATH', 'O'), ('English Language', 'ENG', 'O'), ('Shona', 'SHO', 'O'),
+    ('Ndebele', 'NDEB', 'O'), ('Combined Science', 'CSC', 'O'), ('Biology', 'BIO', 'O'),
+    ('Chemistry', 'CHEM', 'O'), ('Physics', 'PHY', 'O'), ('History', 'HIST', 'O'),
+    ('Geography', 'GEOG', 'O'), ('Accounts', 'ACCT', 'O'), ('Business Studies', 'BS', 'O'),
+    ('Economics', 'ECON', 'O'), ('Computer Science', 'COMP', 'O'), ('Food & Nutrition', 'FOOD', 'O'),
+    ('Fashion & Fabrics', 'FASH', 'O'), ('Woodwork', 'WOOD', 'O'), ('Metalwork', 'MET', 'O'),
+    ('Technical Graphics', 'TECHG', 'O'), ('Building Studies', 'BUILD', 'O'), ('Agriculture', 'AGRI', 'O'),
+    ('Religious Studies', 'RELS', 'O'), ('Literature in English', 'LITE', 'O'), ('French', 'FREN', 'O'),
+    ('Portuguese', 'PORT', 'O'), ('Music', 'MUS', 'O'), ('Art', 'ART', 'O'),
+]
+
+DEFAULT_A_LEVEL_SUBJECTS = [
+    ('Pure Mathematics', 'MATH-PURE', 'A'), ('Statistics', 'MATH-STAT', 'A'),
+    ('Mechanics', 'MATH-MECH', 'A'), ('Further Mathematics', 'MATH-FURTHER', 'A'),
+    ('English Literature', 'ELIT-A', 'A'), ('Shona', 'SHO-A', 'A'),
+    ('Ndebele', 'NDEB-A', 'A'), ('Biology', 'BIO-A', 'A'), ('Chemistry', 'CHEM-A', 'A'),
+    ('Physics', 'PHY-A', 'A'), ('History', 'HIST-A', 'A'), ('Geography', 'GEOG-A', 'A'),
+    ('Accounts', 'ACCT-A', 'A'), ('Economics', 'ECON-A', 'A'), ('Business Studies', 'BS-A', 'A'),
+    ('Computer Science', 'COMP-A', 'A'), ('Food Science', 'FOOD-A', 'A'), ('Fashion & Fabrics', 'FASH-A', 'A'),
+    ('Technical Graphics', 'TECHG-A', 'A'), ('Agriculture', 'AGRI-A', 'A'), ('Divinity', 'DIV-A', 'A'),
+    ('Religious Studies', 'RELS-A', 'A'), ('Literature in English', 'LITE-A', 'A'), ('French', 'FREN-A', 'A'),
+    ('Portuguese', 'PORT-A', 'A'), ('Sociology', 'SOC-A', 'A'), ('Management of Business', 'MOB-A', 'A'),
+]
+
+
+def seed_campus_subjects(campus_id):
+    """Create the standard O/A level subjects for a campus if it has none."""
+    if Subject.query.filter_by(campus_id=campus_id).count() > 0:
+        return False
+    for name, code, level in DEFAULT_O_LEVEL_SUBJECTS + DEFAULT_A_LEVEL_SUBJECTS:
+        db.session.add(Subject(name=name, code=code, level=level, campus_id=campus_id))
+    db.session.commit()
+    return True
+
 @app.route('/setup')
 def setup():
     if Subject.query.first() is not None and os.environ.get('ENABLE_SETUP', '').lower() != 'true':
@@ -2091,33 +2130,7 @@ def setup():
     db.session.commit()
     cid = main_campus.id
 
-    ol = [
-        ('Mathematics', 'MATH', 'O'), ('English Language', 'ENG', 'O'), ('Shona', 'SHO', 'O'),
-        ('Ndebele', 'NDEB', 'O'), ('Combined Science', 'CSC', 'O'), ('Biology', 'BIO', 'O'),
-        ('Chemistry', 'CHEM', 'O'), ('Physics', 'PHY', 'O'), ('History', 'HIST', 'O'),
-        ('Geography', 'GEOG', 'O'), ('Accounts', 'ACCT', 'O'), ('Business Studies', 'BS', 'O'),
-        ('Economics', 'ECON', 'O'), ('Computer Science', 'COMP', 'O'), ('Food & Nutrition', 'FOOD', 'O'),
-        ('Fashion & Fabrics', 'FASH', 'O'), ('Woodwork', 'WOOD', 'O'), ('Metalwork', 'MET', 'O'),
-        ('Technical Graphics', 'TECHG', 'O'), ('Building Studies', 'BUILD', 'O'), ('Agriculture', 'AGRI', 'O'),
-        ('Religious Studies', 'RELS', 'O'), ('Literature in English', 'LITE', 'O'), ('French', 'FREN', 'O'),
-        ('Portuguese', 'PORT', 'O'), ('Music', 'MUS', 'O'), ('Art', 'ART', 'O'),
-    ]
-    al = [
-        ('Pure Mathematics', 'MATH-PURE', 'A'), ('Statistics', 'MATH-STAT', 'A'),
-        ('Mechanics', 'MATH-MECH', 'A'), ('Further Mathematics', 'MATH-FURTHER', 'A'),
-        ('English Literature', 'ELIT-A', 'A'), ('Shona', 'SHO-A', 'A'),
-        ('Ndebele', 'NDEB-A', 'A'), ('Biology', 'BIO-A', 'A'), ('Chemistry', 'CHEM-A', 'A'),
-        ('Physics', 'PHY-A', 'A'), ('History', 'HIST-A', 'A'), ('Geography', 'GEOG-A', 'A'),
-        ('Accounts', 'ACCT-A', 'A'), ('Economics', 'ECON-A', 'A'), ('Business Studies', 'BS-A', 'A'),
-        ('Computer Science', 'COMP-A', 'A'), ('Food Science', 'FOOD-A', 'A'), ('Fashion & Fabrics', 'FASH-A', 'A'),
-        ('Technical Graphics', 'TECHG-A', 'A'), ('Agriculture', 'AGRI-A', 'A'), ('Divinity', 'DIV-A', 'A'),
-        ('Religious Studies', 'RELS-A', 'A'), ('Literature in English', 'LITE-A', 'A'), ('French', 'FREN-A', 'A'),
-        ('Portuguese', 'PORT-A', 'A'), ('Sociology', 'SOC-A', 'A'), ('Management of Business', 'MOB-A', 'A'),
-    ]
-
-    for name, code, level in ol + al:
-        db.session.add(Subject(name=name, code=code, level=level, campus_id=cid))
-    db.session.commit()
+    seed_campus_subjects(cid)
 
     default_fees = [('Form 1', 350), ('Form 2', 350), ('Form 3', 400), ('Form 4', 500), ('Form 5', 450), ('Form 6', 600)]
     for form, fee in default_fees:
