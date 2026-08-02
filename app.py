@@ -81,6 +81,46 @@ def _ensure_campus_columns():
         db.session.rollback()
         print(f'[migration] campus columns skipped: {exc}')
 
+
+def _ensure_per_campus_uniques():
+    """Swap old global unique constraints for per-campus ones (Postgres only).
+
+    Databases created before multi-campus support have a GLOBAL UNIQUE on
+    subjects.code (and fee_settings.form). Seeding standard subjects for a
+    second campus then violates it and crashes. This drops the old constraint
+    and adds the per-campus (campus_id, code) / (campus_id, form) one, so the
+    fix applies automatically at boot without running migrate_campuses.py.
+    """
+    try:
+        if db.engine.dialect.name != 'postgresql':
+            return
+        if 'campuses' not in inspect(db.engine).get_table_names():
+            return
+        with db.engine.begin() as conn:
+            for table, column, new_name in [
+                ('subjects', 'code', 'uq_subjects_campus_code'),
+                ('fee_settings', 'form', 'uq_fee_settings_campus_form'),
+            ]:
+                inspector = inspect(db.engine)
+                if table not in inspector.get_table_names():
+                    continue
+                cols = {c['name'] for c in inspector.get_columns(table)}
+                if 'campus_id' not in cols:
+                    continue
+                existing = {uc['name']: uc.get('column_names') for uc in inspector.get_unique_constraints(table)}
+                for uc_name, uc_cols in list(existing.items()):
+                    if uc_cols == [column]:
+                        print(f'[migration] drop global unique {uc_name} on {table}')
+                        conn.execute(text(f'ALTER TABLE {table} DROP CONSTRAINT "{uc_name}"'))
+                if new_name not in existing:
+                    print(f'[migration] add per-campus unique {new_name} on {table}')
+                    conn.execute(text(
+                        f'ALTER TABLE {table} ADD CONSTRAINT {new_name} '
+                        f'UNIQUE (campus_id, {column}) NOT VALID'))
+                    conn.execute(text(f'ALTER TABLE {table} VALIDATE CONSTRAINT {new_name}'))
+    except Exception as exc:
+        print(f'[migration] per-campus uniques skipped: {exc}')
+
 db.init_app(app)
 with app.app_context():
     db.create_all()
@@ -103,6 +143,7 @@ with app.app_context():
                     conn.commit()
 
     _ensure_campus_columns()
+    _ensure_per_campus_uniques()
 
 
 
