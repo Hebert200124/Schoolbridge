@@ -236,6 +236,17 @@ def compute_expected_fees(term, campus_id):
     return total
 
 
+def staff_currently_on_leave(campus_id, today=None):
+    """Distinct staff currently on approved leave that overlaps `today`."""
+    today = today or date.today()
+    rows = (StaffLeave.query.filter(StaffLeave.campus_id == campus_id,
+                                    StaffLeave.status == 'Approved',
+                                    StaffLeave.start_date <= today,
+                                    StaffLeave.end_date >= today)
+            .with_entities(StaffLeave.user_id).distinct().all())
+    return {r[0] for r in rows}
+
+
 @login_manager.user_loader
 def load_user(user_id):
     if user_id.startswith('student_'):
@@ -715,11 +726,9 @@ def staff_dashboard():
         stats['upcoming_exams'] = scoped(ExamTimetable).filter(ExamTimetable.exam_date >= now_date).order_by(ExamTimetable.exam_date).options(joinedload(ExamTimetable.subject_rel)).limit(5).all()
         stats['recent_activities'] = scoped(ActivityLog).options(joinedload(ActivityLog.user), joinedload(ActivityLog.student)).order_by(ActivityLog.created_at.desc()).limit(10).all()
         stats['recent_activity_posts'] = scoped(Activity).options(joinedload(Activity.creator)).order_by(Activity.created_at.desc()).limit(10).all()
-        stats['staff_on_leave'] = scoped(StaffLeave).filter(StaffLeave.status == 'Approved',
-                                                           StaffLeave.end_date >= now_date).count()
+        stats['staff_on_leave'] = len(staff_currently_on_leave(cid, now_date))
         stats['pass_rates'], stats['form_pass_rates'] = compute_pass_rates(term, campus_id=cid)
-        staff_leaves = scoped(StaffLeave).filter(StaffLeave.status == 'Approved',
-                                                StaffLeave.end_date >= now_date).count()
+        staff_leaves = stats['staff_on_leave']
         stats['active_staff_count'] = stats['staff_count'] - staff_leaves
         stats['staff_on_leave_count'] = staff_leaves
     elif current_user.role == 'principal':
@@ -735,11 +744,11 @@ def staff_dashboard():
         stats['outstanding'] = sum(fa.balance for fa in fee_accounts if fa.balance > 0)
         stats['outstanding_list'] = FeeAccount.query.filter(FeeAccount.term == term, FeeAccount.balance > 0, FeeAccount.campus_id == cid).order_by(FeeAccount.balance.desc()).options(joinedload(FeeAccount.student)).all()
         active_staff = scoped(User).filter(User.role.notin_(['principal', 'super_admin']), User.is_active == True).count()
-        staff_on_leave_count = scoped(StaffLeave).filter(StaffLeave.status == 'Approved',
-                                                        StaffLeave.end_date >= date.today()).count()
-        stats['active_staff_count'] = active_staff
-        stats['staff_on_leave_count'] = staff_on_leave_count
         now_date = date.today()
+        staff_on_leave = len(staff_currently_on_leave(cid, now_date))
+        stats['staff_on_leave'] = staff_on_leave
+        stats['active_staff_count'] = active_staff
+        stats['staff_on_leave_count'] = staff_on_leave
         stats['upcoming_exams'] = scoped(ExamTimetable).filter(ExamTimetable.exam_date >= now_date).order_by(ExamTimetable.exam_date).options(joinedload(ExamTimetable.subject_rel)).limit(5).all()
         stats['recent_activities'] = scoped(ActivityLog).options(joinedload(ActivityLog.user), joinedload(ActivityLog.student)).order_by(ActivityLog.created_at.desc()).limit(10).all()
         stats['recent_activity_posts'] = scoped(Activity).options(joinedload(Activity.creator)).order_by(Activity.created_at.desc()).limit(10).all()
