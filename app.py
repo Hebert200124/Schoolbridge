@@ -5,15 +5,40 @@ from config import Config
 from functools import wraps
 from datetime import datetime, date, timedelta
 import os
+import re
 import random
 import string
 import sib_api_v3_sdk
 from sib_api_v3_sdk.rest import ApiException
+from sqlalchemy.orm import joinedload, selectinload
+from email_validator import validate_email, EmailNotValidError
+
+try:
+    from flask_limiter import Limiter
+    from flask_limiter.util import get_remote_address
+    _Limiter = Limiter
+    _get_remote_address = get_remote_address
+except ImportError:
+    _Limiter = None
+    _get_remote_address = None
+
+
+class _NoopLimiter:
+    def limit(self, *args, **kwargs):
+        def decorator(fn):
+            return fn
+        return decorator
 
 app = Flask(__name__)
 app.config.from_object(Config)
 app.jinja_env.auto_reload = True
 app.config['TEMPLATES_AUTO_RELOAD'] = True
+
+app.config['RATELIMIT_ENABLED'] = os.environ.get('RATELIMIT_ENABLED', 'true').lower() == 'true'
+if _Limiter is not None:
+    limiter = _Limiter(key_func=_get_remote_address, app=app)
+else:
+    limiter = _NoopLimiter()
 
 db.init_app(app)
 with app.app_context():
@@ -102,6 +127,43 @@ def ensure_fee_account(student, term=None, amount_paid=0.0):
     return fee_account
 
 
+def compute_pass_rates(term):
+    """Compute per-subject and per-form pass rates with 3 queries total.
+
+    Previously this looped over every subject and every form, firing one query
+    per iteration (the classic N+1 pattern on the dashboards).
+    """
+    subjects = Subject.query.all()
+    exams = ExamMark.query.filter_by(term=term).all()
+
+    by_subject = {}
+    for e in exams:
+        by_subject.setdefault(e.subject_id, []).append(e)
+
+    pass_rates = []
+    for subj in subjects:
+        group = by_subject.get(subj.id)
+        if group:
+            passed = sum(1 for e in group if e.total_marks > 0 and e.marks / e.total_marks * 100 >= 50)
+            pass_rates.append({'subject': subj.name, 'rate': round(passed / len(group) * 100, 1), 'total': len(group)})
+
+    student_form = {s.id: s.form for s in Student.query.all()}
+    by_form = {}
+    for e in exams:
+        f = student_form.get(e.student_id)
+        if f:
+            by_form.setdefault(f, []).append(e)
+
+    form_pass_rates = []
+    for f in ['Form 1', 'Form 2', 'Form 3', 'Form 4', 'Form 5', 'Form 6']:
+        group = by_form.get(f)
+        if group:
+            passed = sum(1 for e in group if e.total_marks > 0 and e.marks / e.total_marks * 100 >= 50)
+            form_pass_rates.append({'form': f, 'rate': round(passed / len(group) * 100, 1), 'total': len(group)})
+
+    return pass_rates, form_pass_rates
+
+
 @login_manager.user_loader
 def load_user(user_id):
     if user_id.startswith('student_'):
@@ -150,6 +212,7 @@ def index():
 
 
 @app.route('/auth/login', methods=['GET', 'POST'])
+@limiter.limit('5 per minute', methods=['POST'])
 def auth_login():
     if current_user.is_authenticated:
         if isinstance(current_user, Student):
@@ -157,8 +220,8 @@ def auth_login():
         return redirect(url_for('staff_dashboard'))
 
     if request.method == 'POST':
-        username = request.form.get('username')
-        password = request.form.get('password')
+        username = (request.form.get('username') or '').strip()
+        password = request.form.get('password') or ''
 
         student = Student.query.filter_by(student_id=username).first()
         if student and student.check_password(password):
@@ -203,8 +266,13 @@ def auth_change_password():
             flash('Current password is incorrect.', 'danger')
             return render_template('auth/change_password.html')
 
-        if len(new_pw) < 6:
-            flash('New password must be at least 6 characters.', 'danger')
+        errors = password_strength_errors(new_pw)
+        if errors:
+            flash(errors[0], 'danger')
+            return render_template('auth/change_password.html')
+
+        if current_pw == new_pw:
+            flash('New password must be different from the current password.', 'danger')
             return render_template('auth/change_password.html')
 
         if new_pw != confirm_pw:
@@ -271,17 +339,11 @@ def _reg_variants(reg_raw):
 
 
 def find_person_by_reg(reg_raw):
-    from itertools import chain
     variants = _reg_variants(reg_raw)
-    candidates = list(chain.from_iterable(
-        User.query.filter(User.reg_number == r).all() for r in variants
-    )) + list(chain.from_iterable(
-        Student.query.filter(Student.reg_number == r).all() for r in variants
-    )) + list(chain.from_iterable(
-        Student.query.filter(Student.student_id == r).all() for r in variants
-    )) + list(chain.from_iterable(
-        User.query.filter(User.username == r).all() for r in variants
-    ))
+    candidates = list(User.query.filter(User.reg_number.in_(variants)).all())
+    candidates += list(Student.query.filter(Student.reg_number.in_(variants)).all())
+    candidates += list(Student.query.filter(Student.student_id.in_(variants)).all())
+    candidates += list(User.query.filter(User.username.in_(variants)).all())
     seen = set()
     for p in candidates:
         if p.id in seen:
@@ -292,9 +354,13 @@ def find_person_by_reg(reg_raw):
 
 
 @app.route('/auth/reset-password', methods=['GET', 'POST'])
+@limiter.limit('5 per minute', methods=['POST'])
 def auth_reset_password():
     if request.method == 'POST':
         reg_number = request.form.get('reg_number', '').strip()
+        if not reg_number:
+            flash('Please enter your registration number.', 'warning')
+            return redirect(url_for('auth_reset_password'))
         person = find_person_by_reg(reg_number)
 
         session['reset_reg_number'] = reg_number
@@ -311,6 +377,7 @@ def auth_reset_password():
 
 
 @app.route('/auth/reset-email', methods=['GET', 'POST'])
+@limiter.limit('5 per minute', methods=['POST'])
 def auth_reset_email():
     reg_number = session.get('reset_reg_number')
     if not reg_number:
@@ -321,6 +388,10 @@ def auth_reset_email():
         email = request.form.get('email', '').strip()
         user_type = session.get('reset_user_type')
         user_id = session.get('reset_user_id')
+
+        if not is_valid_email(email):
+            flash('If those details match our records, an OTP has been sent to your email.', 'info')
+            return redirect(url_for('auth_reset_email'))
 
         person = None
         if user_type and user_id:
@@ -385,6 +456,7 @@ def auth_reset_email():
 
 
 @app.route('/auth/reset-code', methods=['GET', 'POST'])
+@limiter.limit('10 per minute', methods=['POST'])
 def auth_reset_code():
     otp_id = session.get('reset_otp_id')
     if not otp_id:
@@ -401,7 +473,11 @@ def auth_reset_code():
         return redirect(url_for('auth_reset_password'))
 
     if request.method == 'POST':
-        code = request.form.get('code', '').strip()
+        code = (request.form.get('code', '') or '').strip()
+
+        if not re.fullmatch(r'\d{6}', code):
+            flash('Invalid OTP format.', 'danger')
+            return render_template('auth/reset_code.html')
 
         if otp.attempts >= 5:
             flash('Too many failed attempts. Please request a new OTP.', 'danger')
@@ -434,8 +510,9 @@ def auth_reset_set_password():
         new_password = request.form.get('new_password', '')
         confirm = request.form.get('confirm_password', '')
 
-        if len(new_password) < 6:
-            flash('Password must be at least 6 characters.', 'danger')
+        errors = password_strength_errors(new_password)
+        if errors:
+            flash(errors[0], 'danger')
             return render_template('auth/reset_set_password.html')
 
         if new_password != confirm:
@@ -492,31 +569,14 @@ def staff_dashboard():
         stats['total_collected'] = db.session.query(db.func.sum(Payment.amount)).filter(Payment.cleared == True).scalar() or 0
         fee_accounts = FeeAccount.query.filter_by(term=term).all()
         stats['outstanding'] = sum(fa.balance for fa in fee_accounts if fa.balance > 0)
-        stats['outstanding_list'] = FeeAccount.query.filter(FeeAccount.term == term, FeeAccount.balance > 0).order_by(FeeAccount.balance.desc()).all()
+        stats['outstanding_list'] = FeeAccount.query.filter(FeeAccount.term == term, FeeAccount.balance > 0).order_by(FeeAccount.balance.desc()).options(joinedload(FeeAccount.student)).all()
         now_date = date.today()
-        stats['upcoming_exams'] = ExamTimetable.query.filter(ExamTimetable.exam_date >= now_date).order_by(ExamTimetable.exam_date).limit(5).all()
-        stats['recent_activities'] = ActivityLog.query.order_by(ActivityLog.created_at.desc()).limit(10).all()
-        stats['recent_activity_posts'] = Activity.query.order_by(Activity.created_at.desc()).limit(10).all()
+        stats['upcoming_exams'] = ExamTimetable.query.filter(ExamTimetable.exam_date >= now_date).order_by(ExamTimetable.exam_date).options(joinedload(ExamTimetable.subject_rel)).limit(5).all()
+        stats['recent_activities'] = ActivityLog.query.options(joinedload(ActivityLog.user), joinedload(ActivityLog.student)).order_by(ActivityLog.created_at.desc()).limit(10).all()
+        stats['recent_activity_posts'] = Activity.query.options(joinedload(Activity.creator)).order_by(Activity.created_at.desc()).limit(10).all()
         stats['staff_on_leave'] = StaffLeave.query.filter(StaffLeave.status == 'Approved',
                                                            StaffLeave.end_date >= now_date).count()
-        subjects = Subject.query.all()
-        pass_rates = []
-        for subj in subjects:
-            exams = ExamMark.query.filter_by(subject_id=subj.id, term=term).all()
-            if exams:
-                passed = sum(1 for e in exams if e.marks / e.total_marks * 100 >= 50)
-                pass_rates.append({'subject': subj.name, 'rate': round(passed / len(exams) * 100, 1), 'total': len(exams)})
-        stats['pass_rates'] = pass_rates
-        form_pass_rates = []
-        forms = ['Form 1', 'Form 2', 'Form 3', 'Form 4', 'Form 5', 'Form 6']
-        for f in forms:
-            sids = [s.id for s in Student.query.filter_by(form=f).all()]
-            if sids:
-                exams = ExamMark.query.filter(ExamMark.student_id.in_(sids), ExamMark.term == term).all()
-                if exams:
-                    passed = sum(1 for e in exams if e.marks / e.total_marks * 100 >= 50)
-                    form_pass_rates.append({'form': f, 'rate': round(passed / len(exams) * 100, 1), 'total': len(exams)})
-        stats['form_pass_rates'] = form_pass_rates
+        stats['pass_rates'], stats['form_pass_rates'] = compute_pass_rates(term)
         stats['levies'] = LevyFund.query.filter_by(term=term).all()
         staff_leaves = StaffLeave.query.filter(StaffLeave.status == 'Approved',
                                                 StaffLeave.end_date >= now_date).count()
@@ -525,38 +585,24 @@ def staff_dashboard():
     elif current_user.role == 'principal':
         term = 'Term 1'
         stats['term'] = term
+        stats['total_staff'] = User.query.filter(User.role != 'principal').count()
+        stats['total_students'] = Student.query.count()
+        stats['active_students'] = Student.query.filter_by(is_active=True).count()
         stats['total_expected'] = db.session.query(db.func.sum(FeeAccount.total_fees)).filter_by(term=term).scalar() or 0
         stats['total_collected'] = db.session.query(db.func.sum(Payment.amount)).filter(Payment.cleared == True).scalar() or 0
         fee_accounts = FeeAccount.query.filter_by(term=term).all()
         stats['outstanding'] = sum(fa.balance for fa in fee_accounts if fa.balance > 0)
-        stats['outstanding_list'] = FeeAccount.query.filter(FeeAccount.term == term, FeeAccount.balance > 0).order_by(FeeAccount.balance.desc()).all()
+        stats['outstanding_list'] = FeeAccount.query.filter(FeeAccount.term == term, FeeAccount.balance > 0).order_by(FeeAccount.balance.desc()).options(joinedload(FeeAccount.student)).all()
         active_staff = User.query.filter(User.role != 'principal', User.is_active == True).count()
         staff_on_leave_count = StaffLeave.query.filter(StaffLeave.status == 'Approved',
                                                         StaffLeave.end_date >= date.today()).count()
         stats['active_staff_count'] = active_staff
         stats['staff_on_leave_count'] = staff_on_leave_count
         now_date = date.today()
-        stats['upcoming_exams'] = ExamTimetable.query.filter(ExamTimetable.exam_date >= now_date).order_by(ExamTimetable.exam_date).limit(5).all()
-        stats['recent_activities'] = ActivityLog.query.order_by(ActivityLog.created_at.desc()).limit(10).all()
-        stats['recent_activity_posts'] = Activity.query.order_by(Activity.created_at.desc()).limit(10).all()
-        subjects = Subject.query.all()
-        pass_rates = []
-        for subj in subjects:
-            exams = ExamMark.query.filter_by(subject_id=subj.id, term=term).all()
-            if exams:
-                passed = sum(1 for e in exams if e.marks / e.total_marks * 100 >= 50)
-                pass_rates.append({'subject': subj.name, 'rate': round(passed / len(exams) * 100, 1), 'total': len(exams)})
-        stats['pass_rates'] = pass_rates
-        form_pass_rates = []
-        forms = ['Form 1', 'Form 2', 'Form 3', 'Form 4', 'Form 5', 'Form 6']
-        for f in forms:
-            sids = [s.id for s in Student.query.filter_by(form=f).all()]
-            if sids:
-                exams = ExamMark.query.filter(ExamMark.student_id.in_(sids), ExamMark.term == term).all()
-                if exams:
-                    passed = sum(1 for e in exams if e.marks / e.total_marks * 100 >= 50)
-                    form_pass_rates.append({'form': f, 'rate': round(passed / len(exams) * 100, 1), 'total': len(exams)})
-        stats['form_pass_rates'] = form_pass_rates
+        stats['upcoming_exams'] = ExamTimetable.query.filter(ExamTimetable.exam_date >= now_date).order_by(ExamTimetable.exam_date).options(joinedload(ExamTimetable.subject_rel)).limit(5).all()
+        stats['recent_activities'] = ActivityLog.query.options(joinedload(ActivityLog.user), joinedload(ActivityLog.student)).order_by(ActivityLog.created_at.desc()).limit(10).all()
+        stats['recent_activity_posts'] = Activity.query.options(joinedload(Activity.creator)).order_by(Activity.created_at.desc()).limit(10).all()
+        stats['pass_rates'], stats['form_pass_rates'] = compute_pass_rates(term)
         stats['levies'] = LevyFund.query.filter_by(term=term).all()
 
     return render_template('staff/dashboard.html', stats=stats)
@@ -740,7 +786,7 @@ def teacher_save_remark():
 @login_required
 @role_required('cashier')
 def cashier_dashboard():
-    recent_payments = Payment.query.order_by(Payment.created_at.desc()).limit(20).all()
+    recent_payments = Payment.query.order_by(Payment.created_at.desc()).options(joinedload(Payment.student), joinedload(Payment.cashier)).limit(20).all()
     pending = Payment.query.filter_by(cleared=False).count()
     all_students = Student.query.order_by(Student.student_id).all()
     return render_template('staff/cashier/dashboard.html', payments=recent_payments, pending=pending, all_students=all_students)
@@ -1112,6 +1158,11 @@ def principal_add_staff():
             flash('Username already exists.', 'danger')
             return redirect(url_for('principal_add_staff'))
 
+        errors = password_strength_errors(password)
+        if errors:
+            flash(errors[0], 'danger')
+            return redirect(url_for('principal_add_staff'))
+
         reg_number = f'STF{username.upper()}'
 
         user = User(
@@ -1327,17 +1378,21 @@ def export_ministry_report():
     writer = csv.writer(output)
     writer.writerow(['Form', 'Total Students', 'Total Passed', 'Pass Rate', 'Total Expected Fees', 'Total Collected', 'Outstanding'])
     forms = ['Form 1', 'Form 2', 'Form 3', 'Form 4', 'Form 5', 'Form 6']
+    all_students = Student.query.all()
+    student_form = {s.id: s.form for s in all_students}
+    all_exams = ExamMark.query.filter_by(term=term).all()
+    by_form = {}
+    for e in all_exams:
+        f = student_form.get(e.student_id)
+        if f:
+            by_form.setdefault(f, []).append(e)
+    fee_total = db.session.query(db.func.sum(FeeAccount.total_fees)).filter(FeeAccount.term == term).scalar() or 0
+    fee_collected = db.session.query(db.func.sum(Payment.amount)).filter(Payment.cleared == True).scalar() or 0
+    outstanding_fees = fee_total - fee_collected
     for f in forms:
-        sids = [s.id for s in Student.query.filter_by(form=f).all()]
-        total = len(sids)
-        passed = 0
-        if sids:
-            exams = ExamMark.query.filter(ExamMark.student_id.in_(sids), ExamMark.term == term).all()
-            if exams:
-                passed = sum(1 for e in exams if e.marks / e.total_marks * 100 >= 50)
-        fee_total = db.session.query(db.func.sum(FeeAccount.total_fees)).filter(FeeAccount.term == term).scalar() or 0
-        fee_collected = db.session.query(db.func.sum(Payment.amount)).filter(Payment.cleared == True).scalar() or 0
-        outstanding_fees = fee_total - fee_collected
+        total = sum(1 for s in all_students if s.form == f)
+        exams = by_form.get(f, [])
+        passed = sum(1 for e in exams if e.total_marks > 0 and e.marks / e.total_marks * 100 >= 50)
         pass_rate = round(passed / total * 100, 1) if total > 0 else 0
         writer.writerow([f, total, passed, f'{pass_rate}%', f'${fee_total:.2f}', f'${fee_collected:.2f}', f'${outstanding_fees:.2f}'])
     response = app.response_class(output.getvalue(), mimetype='text/csv',
@@ -1419,22 +1474,29 @@ def student_results():
         pc_by_key[(pc.subject_id, pc.term, pc.academic_year)] = pc
 
     results = {}
+    prev_monthly_all = MonthlyTest.query.filter(
+        MonthlyTest.student_id == current_user.id,
+        MonthlyTest.academic_year < str(datetime.now().year)
+    ).order_by(MonthlyTest.academic_year, MonthlyTest.term).all()
+    prev_exam_all = ExamMark.query.filter(
+        ExamMark.student_id == current_user.id,
+        ExamMark.academic_year < str(datetime.now().year)
+    ).order_by(ExamMark.academic_year, ExamMark.term).all()
+
+    prev_monthly_by_subj = {}
+    for mt in prev_monthly_all:
+        prev_monthly_by_subj.setdefault(mt.subject_id, []).append(mt)
+    prev_exam_by_subj = {}
+    for em in prev_exam_all:
+        prev_exam_by_subj.setdefault(em.subject_id, []).append(em)
+
     for subj in subjects:
         s_monthly = [mt for mt in monthly_tests if mt.subject_id == subj.id]
         s_exam = [em for em in exam_marks_list if em.subject_id == subj.id]
 
-        # Previous results (different academic year or term)
         level = 'A' if '6' in current_user.form or '5' in current_user.form else 'O'
-        prev_monthly = MonthlyTest.query.filter(
-            MonthlyTest.student_id == current_user.id,
-            MonthlyTest.subject_id == subj.id,
-            MonthlyTest.academic_year < str(datetime.now().year)
-        ).order_by(MonthlyTest.academic_year, MonthlyTest.term).all()
-        prev_exam = ExamMark.query.filter(
-            ExamMark.student_id == current_user.id,
-            ExamMark.subject_id == subj.id,
-            ExamMark.academic_year < str(datetime.now().year)
-        ).order_by(ExamMark.academic_year, ExamMark.term).all()
+        prev_monthly = prev_monthly_by_subj.get(subj.id, [])
+        prev_exam = prev_exam_by_subj.get(subj.id, [])
 
         pc = pc_by_key.get((subj.id, 'Term 1', str(datetime.now().year)))
 
@@ -1625,6 +1687,68 @@ with app.app_context():
     except Exception as exc:
         db.session.rollback()
         print(f'[migration] A-Level math subject update skipped: {exc}')
+
+
+# ============ SECURITY ============
+
+@app.after_request
+def add_security_headers(response):
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    response.headers['X-Frame-Options'] = 'SAMEORIGIN'
+    response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
+    response.headers['Permissions-Policy'] = 'camera=(), microphone=(), geolocation=()'
+    response.headers['Content-Security-Policy'] = (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+        "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+        "img-src 'self' data:; "
+        "font-src 'self' data: https://cdn.jsdelivr.net; "
+        "connect-src 'self'; "
+        "frame-ancestors 'self'; "
+        "form-action 'self'"
+    )
+    if request.is_secure:
+        response.headers.setdefault('Strict-Transport-Security', 'max-age=31536000; includeSubDomains')
+    return response
+
+
+COMMON_WEAK_PASSWORDS = {
+    'password', 'password1', 'password123', '123456', '1234567', '12345678', '123456789',
+    '1234567890', '123123', 'qwerty', 'qwerty123', 'abc123', 'admin', 'admin123',
+    'administrator', 'letmein', 'welcome', 'iloveyou', 'monkey', 'dragon', 'master',
+    'login', 'princess', 'football', 'shadow', 'sunshine', 'trustno1', 'default',
+    'student123', 'teacher123', 'principal123', 'cashier123', 'school123', 'schoolbridge',
+}
+
+
+def password_strength_errors(password):
+    """Return a list of problems with the password, or [] if it is strong."""
+    errors = []
+    if not password:
+        errors.append('Password is required.')
+        return errors
+    if len(password) < 8:
+        errors.append('Password must be at least 8 characters long.')
+    if password.lower() in COMMON_WEAK_PASSWORDS:
+        errors.append('That password is too common. Please choose a stronger one.')
+    if not re.search(r'[A-Za-z]', password) or not re.search(r'\d', password):
+        errors.append('Password must contain at least one letter and one number.')
+    return errors
+
+
+def is_valid_email(email):
+    try:
+        validate_email(email or '', check_deliverability=False)
+        return True
+    except EmailNotValidError:
+        return False
+
+
+def parse_float_field(value, default=0.0):
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
 
 
 if __name__ == '__main__':

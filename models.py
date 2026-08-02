@@ -29,16 +29,16 @@ class User(UserMixin, db.Model):
     __tablename__ = 'users'
 
     id = db.Column(db.Integer, primary_key=True)
-    username = db.Column(db.String(80), unique=True, nullable=False)
-    email = db.Column(db.String(120), unique=True, nullable=False)
+    username = db.Column(db.String(80), unique=True, nullable=False, index=True)
+    email = db.Column(db.String(120), unique=True, nullable=False, index=True)
     password_hash = db.Column(db.String(256), nullable=False)
-    role = db.Column(db.String(20), nullable=False)
-    subject_id = db.Column(db.Integer, db.ForeignKey('subjects.id'), nullable=True)
+    role = db.Column(db.String(20), nullable=False, index=True)
+    subject_id = db.Column(db.Integer, db.ForeignKey('subjects.id'), nullable=True, index=True)
     full_name = db.Column(db.String(120), nullable=False)
     phone = db.Column(db.String(20))
-    reg_number = db.Column(db.String(50), unique=True)
-    is_active = db.Column(db.Boolean, default=True)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    reg_number = db.Column(db.String(50), unique=True, index=True)
+    is_active = db.Column(db.Boolean, default=True, index=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
 
     teacher_subject = db.relationship('Subject', backref='teacher', lazy=True, foreign_keys=[subject_id])
     payments = db.relationship('Payment', backref='cashier', lazy=True, foreign_keys='Payment.cashier_id')
@@ -67,17 +67,17 @@ class Student(UserMixin, db.Model):
     __tablename__ = 'students'
 
     id = db.Column(db.Integer, primary_key=True)
-    student_id = db.Column(db.String(20), unique=True, nullable=False)
+    student_id = db.Column(db.String(20), unique=True, nullable=False, index=True)
     first_name = db.Column(db.String(100), nullable=False)
     last_name = db.Column(db.String(100), nullable=False)
-    form = db.Column(db.String(10), nullable=False)
-    curriculum = db.Column(db.String(10), default='ZIMSEC')
-    email = db.Column(db.String(120), unique=True)
+    form = db.Column(db.String(10), nullable=False, index=True)
+    curriculum = db.Column(db.String(10), default='ZIMSEC', index=True)
+    email = db.Column(db.String(120), unique=True, index=True)
     phone = db.Column(db.String(20))
-    reg_number = db.Column(db.String(50), unique=True)
+    reg_number = db.Column(db.String(50), unique=True, index=True)
     password_hash = db.Column(db.String(256), nullable=False)
-    is_active = db.Column(db.Boolean, default=True)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    is_active = db.Column(db.Boolean, default=True, index=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
 
     subjects = db.relationship('StudentSubject', backref='student', lazy=True)
     monthly_tests = db.relationship('MonthlyTest', backref='student', lazy=True)
@@ -101,24 +101,30 @@ class Student(UserMixin, db.Model):
 
 class StudentSubject(db.Model):
     __tablename__ = 'student_subjects'
+    __table_args__ = (
+        db.Index('ix_student_subjects_student_subject', 'student_id', 'subject_id'),
+    )
 
     id = db.Column(db.Integer, primary_key=True)
-    student_id = db.Column(db.Integer, db.ForeignKey('students.id'), nullable=False)
-    subject_id = db.Column(db.Integer, db.ForeignKey('subjects.id'), nullable=False)
+    student_id = db.Column(db.Integer, db.ForeignKey('students.id'), nullable=False, index=True)
+    subject_id = db.Column(db.Integer, db.ForeignKey('subjects.id'), nullable=False, index=True)
 
 
 class MonthlyTest(db.Model):
     __tablename__ = 'monthly_tests'
+    __table_args__ = (
+        db.Index('ix_monthly_tests_student_subject_term', 'student_id', 'subject_id', 'term'),
+    )
 
     id = db.Column(db.Integer, primary_key=True)
-    student_id = db.Column(db.Integer, db.ForeignKey('students.id'), nullable=False)
-    subject_id = db.Column(db.Integer, db.ForeignKey('subjects.id'), nullable=False)
+    student_id = db.Column(db.Integer, db.ForeignKey('students.id'), nullable=False, index=True)
+    subject_id = db.Column(db.Integer, db.ForeignKey('subjects.id'), nullable=False, index=True)
     term = db.Column(db.String(10), nullable=False)
-    academic_year = db.Column(db.String(10), default=lambda: str(datetime.now().year))
+    academic_year = db.Column(db.String(10), default=lambda: str(datetime.now().year), index=True)
     month = db.Column(db.String(20), nullable=False)
     marks = db.Column(db.Float, nullable=False)
     total_marks = db.Column(db.Float, default=100.0)
-    teacher_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    teacher_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, index=True)
     comment = db.Column(db.Text)
     entered_by = db.relationship('User', backref='entered_tests', foreign_keys=[teacher_id])
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -130,16 +136,19 @@ class MonthlyTest(db.Model):
 
 class ExamMark(db.Model):
     __tablename__ = 'exam_marks'
+    __table_args__ = (
+        db.Index('ix_exam_marks_student_subject_term', 'student_id', 'subject_id', 'term'),
+    )
 
     id = db.Column(db.Integer, primary_key=True)
-    student_id = db.Column(db.Integer, db.ForeignKey('students.id'), nullable=False)
-    subject_id = db.Column(db.Integer, db.ForeignKey('subjects.id'), nullable=False)
+    student_id = db.Column(db.Integer, db.ForeignKey('students.id'), nullable=False, index=True)
+    subject_id = db.Column(db.Integer, db.ForeignKey('subjects.id'), nullable=False, index=True)
     term = db.Column(db.String(10), nullable=False)
-    academic_year = db.Column(db.String(10), default=lambda: str(datetime.now().year))
+    academic_year = db.Column(db.String(10), default=lambda: str(datetime.now().year), index=True)
     exam_type = db.Column(db.String(50), nullable=False)
     marks = db.Column(db.Float, nullable=False)
     total_marks = db.Column(db.Float, default=100.0)
-    teacher_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    teacher_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, index=True)
     comment = db.Column(db.Text)
     entered_by = db.relationship('User', backref='entered_exams', foreign_keys=[teacher_id])
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -151,10 +160,13 @@ class ExamMark(db.Model):
 
 class PrincipalComment(db.Model):
     __tablename__ = 'principal_comments'
+    __table_args__ = (
+        db.Index('ix_principal_comments_student_subject_term_year', 'student_id', 'subject_id', 'term', 'academic_year'),
+    )
 
     id = db.Column(db.Integer, primary_key=True)
-    student_id = db.Column(db.Integer, db.ForeignKey('students.id'), nullable=False)
-    subject_id = db.Column(db.Integer, db.ForeignKey('subjects.id'), nullable=False)
+    student_id = db.Column(db.Integer, db.ForeignKey('students.id'), nullable=False, index=True)
+    subject_id = db.Column(db.Integer, db.ForeignKey('subjects.id'), nullable=False, index=True)
     term = db.Column(db.String(10), nullable=False)
     academic_year = db.Column(db.String(10), nullable=False)
     comment = db.Column(db.Text, nullable=False)
@@ -167,10 +179,13 @@ class PrincipalComment(db.Model):
 
 class FeeAccount(db.Model):
     __tablename__ = 'fee_accounts'
+    __table_args__ = (
+        db.Index('ix_fee_accounts_student_term', 'student_id', 'term'),
+    )
 
     id = db.Column(db.Integer, primary_key=True)
-    student_id = db.Column(db.Integer, db.ForeignKey('students.id'), nullable=False)
-    term = db.Column(db.String(10), nullable=False)
+    student_id = db.Column(db.Integer, db.ForeignKey('students.id'), nullable=False, index=True)
+    term = db.Column(db.String(10), nullable=False, index=True)
     total_fees = db.Column(db.Float, default=0.0)
     amount_paid = db.Column(db.Float, default=0.0)
     balance = db.Column(db.Float, default=0.0)
@@ -180,19 +195,22 @@ class FeeAccount(db.Model):
 
 class Payment(db.Model):
     __tablename__ = 'payments'
+    __table_args__ = (
+        db.Index('ix_payments_student_created', 'student_id', 'created_at'),
+    )
 
     id = db.Column(db.Integer, primary_key=True)
-    student_id = db.Column(db.Integer, db.ForeignKey('students.id'), nullable=False)
+    student_id = db.Column(db.Integer, db.ForeignKey('students.id'), nullable=False, index=True)
     receipt_number = db.Column(db.String(50), unique=True, nullable=False)
     amount = db.Column(db.Float, nullable=False)
     payment_date = db.Column(db.DateTime, nullable=False)
     payment_method = db.Column(db.String(50))
     reference = db.Column(db.String(100))
-    cashier_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
-    cleared = db.Column(db.Boolean, default=False)
+    cashier_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, index=True)
+    cleared = db.Column(db.Boolean, default=False, index=True)
     cleared_at = db.Column(db.DateTime)
     notes = db.Column(db.Text)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
 
 
 class FeeSetting(db.Model):
@@ -208,10 +226,10 @@ class TeacherRemark(db.Model):
     __tablename__ = 'teacher_remarks'
 
     id = db.Column(db.Integer, primary_key=True)
-    student_id = db.Column(db.Integer, db.ForeignKey('students.id'), nullable=False)
-    teacher_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    student_id = db.Column(db.Integer, db.ForeignKey('students.id'), nullable=False, index=True)
+    teacher_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, index=True)
     remark = db.Column(db.Text, nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
 
     student = db.relationship('Student', backref='teacher_remarks', lazy=True)
     teacher = db.relationship('User', backref='teacher_remarks', lazy=True)
@@ -221,12 +239,12 @@ class Timetable(db.Model):
     __tablename__ = 'timetables'
 
     id = db.Column(db.Integer, primary_key=True)
-    form = db.Column(db.String(10), nullable=False)
+    form = db.Column(db.String(10), nullable=False, index=True)
     day_of_week = db.Column(db.String(15), nullable=False)
-    subject_id = db.Column(db.Integer, db.ForeignKey('subjects.id'), nullable=False)
+    subject_id = db.Column(db.Integer, db.ForeignKey('subjects.id'), nullable=False, index=True)
     start_time = db.Column(db.String(10), nullable=False)
     end_time = db.Column(db.String(10), nullable=False)
-    teacher_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    teacher_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, index=True)
     room = db.Column(db.String(20))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
@@ -238,8 +256,8 @@ class ExamTimetable(db.Model):
     __tablename__ = 'exam_timetables'
 
     id = db.Column(db.Integer, primary_key=True)
-    form = db.Column(db.String(10), nullable=False)
-    subject_id = db.Column(db.Integer, db.ForeignKey('subjects.id'), nullable=False)
+    form = db.Column(db.String(10), nullable=False, index=True)
+    subject_id = db.Column(db.Integer, db.ForeignKey('subjects.id'), nullable=False, index=True)
     exam_date = db.Column(db.Date, nullable=False)
     start_time = db.Column(db.String(10), nullable=False)
     end_time = db.Column(db.String(10), nullable=False)
@@ -251,13 +269,16 @@ class ExamTimetable(db.Model):
 
 class ActivityLog(db.Model):
     __tablename__ = 'activity_logs'
+    __table_args__ = (
+        db.Index('ix_activity_logs_created', 'created_at'),
+    )
 
     id = db.Column(db.Integer, primary_key=True)
     action = db.Column(db.String(100), nullable=False)
     description = db.Column(db.Text)
-    visibility = db.Column(db.String(10), default='public')
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
-    student_id = db.Column(db.Integer, db.ForeignKey('students.id'), nullable=True)
+    visibility = db.Column(db.String(10), default='public', index=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True, index=True)
+    student_id = db.Column(db.Integer, db.ForeignKey('students.id'), nullable=True, index=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     user = db.relationship('User', backref='activities', foreign_keys=[user_id])
@@ -271,8 +292,8 @@ class Activity(db.Model):
     title = db.Column(db.String(200), nullable=False)
     description = db.Column(db.Text)
     visibility = db.Column(db.String(10), default='all')
-    created_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, index=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
 
     creator = db.relationship('User', backref='posted_activities', foreign_keys=[created_by])
 
@@ -281,11 +302,11 @@ class StaffLeave(db.Model):
     __tablename__ = 'staff_leaves'
 
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, index=True)
     leave_type = db.Column(db.String(50), nullable=False)
     start_date = db.Column(db.Date, nullable=False)
     end_date = db.Column(db.Date, nullable=False)
-    status = db.Column(db.String(20), default='Pending')
+    status = db.Column(db.String(20), default='Pending', index=True)
     reason = db.Column(db.Text)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
@@ -299,8 +320,8 @@ class LevyFund(db.Model):
     name = db.Column(db.String(100), nullable=False)
     total_amount = db.Column(db.Float, default=0.0)
     amount_collected = db.Column(db.Float, default=0.0)
-    term = db.Column(db.String(10), nullable=False)
-    academic_year = db.Column(db.String(10), default=lambda: str(datetime.now().year))
+    term = db.Column(db.String(10), nullable=False, index=True)
+    academic_year = db.Column(db.String(10), default=lambda: str(datetime.now().year), index=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -311,13 +332,16 @@ class LevyFund(db.Model):
 
 class OTPCode(db.Model):
     __tablename__ = 'otp_codes'
+    __table_args__ = (
+        db.Index('ix_otp_codes_user_lookup', 'user_type', 'user_id', 'used'),
+    )
 
     id = db.Column(db.Integer, primary_key=True)
     user_type = db.Column(db.String(10), nullable=False)
     user_id = db.Column(db.Integer, nullable=False)
     phone = db.Column(db.String(255), nullable=False)
     code = db.Column(db.String(6), nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
     expires_at = db.Column(db.DateTime, nullable=False)
     used = db.Column(db.Boolean, default=False)
     attempts = db.Column(db.Integer, default=0)
