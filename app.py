@@ -1438,6 +1438,17 @@ def principal_add_staff():
         reg_number = f'STF{username.upper()}'
         target_campus_id = get_selected_campus_id()
 
+        on_leave = request.form.get('on_leave') == 'on'
+        leave_start = request.form.get('leave_start')
+        leave_end = request.form.get('leave_end')
+        if on_leave:
+            if not leave_start or not leave_end:
+                flash('Please provide leave dates when marking staff as on leave.', 'danger')
+                return redirect(url_for('principal_add_staff'))
+            if leave_start > leave_end:
+                flash('Leave start date cannot be after end date.', 'danger')
+                return redirect(url_for('principal_add_staff'))
+
         user = User(
             username=username, email=email, role=role, full_name=full_name,
             phone=phone, reg_number=reg_number,
@@ -1446,6 +1457,17 @@ def principal_add_staff():
         )
         user.set_password(password)
         db.session.add(user)
+        db.session.flush()
+
+        if on_leave:
+            db.session.add(StaffLeave(
+                campus_id=target_campus_id, user_id=user.id,
+                leave_type=request.form.get('leave_type') or 'Annual',
+                start_date=datetime.strptime(leave_start, '%Y-%m-%d').date(),
+                end_date=datetime.strptime(leave_end, '%Y-%m-%d').date(),
+                status='Approved', reason=request.form.get('leave_reason') or None
+            ))
+
         db.session.commit()
         flash(f'Staff {full_name} added as {role}. Reg: {reg_number}', 'success')
         return redirect(url_for('principal_dashboard'))
@@ -2020,7 +2042,7 @@ def super_admin_campus_staff(campus_id):
         return redirect(url_for('super_admin_campus_staff', campus_id=campus.id))
 
     staff = User.query.filter(User.campus_id == campus.id, User.role != 'super_admin').order_by(User.full_name).all()
-    subjects = Subject.query.filter_by(campus_id=campus.id).order_by(Subject.name).all()
+    subjects = Subject.query.order_by(Subject.name).all()
     return render_template('super_admin/campus_staff.html', campus=campus, staff=staff, subjects=subjects)
 
 

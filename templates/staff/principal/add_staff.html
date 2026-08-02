@@ -60,6 +60,39 @@
                             <input type="text" class="form-control" name="password" required value="password123">
                         </div>
                     </div>
+                    <div class="mb-3 form-check">
+                        <input type="checkbox" class="form-check-input" name="on_leave" id="onLeaveToggle">
+                        <label class="form-check-label" for="onLeaveToggle">Currently on leave</label>
+                    </div>
+                    <div id="leaveGroup" style="display:none;">
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Leave Type</label>
+                                <select class="form-select" name="leave_type">
+                                    <option value="Annual">Annual</option>
+                                    <option value="Sick">Sick</option>
+                                    <option value="Maternity">Maternity</option>
+                                    <option value="Study">Study</option>
+                                    <option value="Unpaid">Unpaid</option>
+                                    <option value="Other">Other</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Start Date</label>
+                                <input type="date" class="form-control" name="leave_start">
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">End Date</label>
+                                <input type="date" class="form-control" name="leave_end">
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Reason</label>
+                            <textarea class="form-control" name="leave_reason" rows="2"></textarea>
+                        </div>
+                    </div>
                     <button type="submit" class="btn btn-primary w-100"><i class="bi bi-save"></i> Add Staff Member</button>
                 </form>
             </div>
@@ -69,6 +102,9 @@
 <script>
 document.getElementById('staffRole').addEventListener('change', function() {
     document.getElementById('subjectGroup').style.display = this.value === 'teacher' ? '' : 'none';
+});
+document.getElementById('onLeaveToggle').addEventListener('change', function() {
+    document.getElementById('leaveGroup').style.display = this.checked ? '' : 'none';
 });
 </script>
 {% endblock %}
