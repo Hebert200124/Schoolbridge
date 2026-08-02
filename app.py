@@ -1723,6 +1723,34 @@ def super_admin_add_campus():
     return redirect(url_for('super_admin_campuses'))
 
 
+@app.route('/super-admin/campuses/<int:campus_id>/edit', methods=['GET', 'POST'])
+@login_required
+@super_admin_required
+def super_admin_edit_campus(campus_id):
+    campus = Campus.query.get_or_404(campus_id)
+    if request.method == 'POST':
+        name = request.form.get('name', '').strip()
+        code = request.form.get('code', '').strip().upper()
+        address = request.form.get('address', '').strip()
+        if not name or not code:
+            flash('Campus name and code are required.', 'danger')
+            return redirect(url_for('super_admin_edit_campus', campus_id=campus.id))
+        clash = Campus.query.filter(Campus.code == code, Campus.id != campus.id).first()
+        if clash:
+            flash(f'Campus code {code} is already used by {clash.name}.', 'danger')
+            return redirect(url_for('super_admin_edit_campus', campus_id=campus.id))
+        old = f'{campus.name} ({campus.code})'
+        campus.name = name
+        campus.code = code
+        campus.address = address
+        db.session.commit()
+        log_activity('Campus updated', f'{old} -> {name} ({code})', user=current_user)
+        flash(f'Campus {name} updated.', 'success')
+        return redirect(url_for('super_admin_campuses'))
+    return render_template('super_admin/edit_campus.html', campus=campus)
+
+
+
 @app.route('/super-admin/campuses/<int:campus_id>/staff', methods=['GET', 'POST'])
 @login_required
 @super_admin_required

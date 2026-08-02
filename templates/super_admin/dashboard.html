@@ -69,6 +69,7 @@
                                 <td>{{ c.student_count }}</td>
                                 <td>{{ c.staff_count }}</td>
                                 <td>
+                                    <a href="{{ url_for('super_admin_edit_campus', campus_id=c.id) }}" class="btn btn-sm btn-outline-secondary"><i class="bi bi-pencil"></i> Edit</a>
                                     <a href="{{ url_for('super_admin_campus_staff', campus_id=c.id) }}" class="btn btn-sm btn-outline-primary"><i class="bi bi-people"></i> Staff</a>
                                 </td>
                             </tr>

@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Edit Campus - SchoolBridge{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="bi bi-pencil-square"></i> Edit Campus</h5>
+                <a href="{{ url_for('super_admin_campuses') }}" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-left"></i> Back</a>
+            </div>
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('super_admin_edit_campus', campus_id=campus.id) }}">
+                    <div class="mb-3">
+                        <label class="form-label">Name</label>
+                        <input type="text" class="form-control" name="name" value="{{ campus.name }}" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Code (short, unique)</label>
+                        <input type="text" class="form-control" name="code" value="{{ campus.code }}" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Address</label>
+                        <input type="text" class="form-control" name="address" value="{{ campus.address or '' }}">
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100"><i class="bi bi-save"></i> Save Changes</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

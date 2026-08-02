@@ -24,6 +24,9 @@
                         {% if current_user.role == 'super_admin' %}
                         <li class="nav-item"><a class="nav-link" href="{{ url_for('super_admin_dashboard') }}"><i class="bi bi-speedometer2"></i> Dashboard</a></li>
                         <li class="nav-item"><a class="nav-link" href="{{ url_for('super_admin_campuses') }}"><i class="bi bi-building"></i> Campuses</a></li>
+                        <li class="nav-item"><a class="nav-link" href="{{ url_for('principal_dashboard') }}"><i class="bi bi-people"></i> Staff & Students</a></li>
+                        <li class="nav-item"><a class="nav-link" href="{{ url_for('principal_fee_settings') }}"><i class="bi bi-currency-dollar"></i> Fees</a></li>
+                        <li class="nav-item"><a class="nav-link" href="{{ url_for('principal_timetables') }}"><i class="bi bi-calendar-week"></i> Timetables</a></li>
                         {% else %}
                         <li class="nav-item"><a class="nav-link" href="{{ url_for('staff_dashboard') }}"><i class="bi bi-speedometer2"></i> Dashboard</a></li>
                         {% endif %}
