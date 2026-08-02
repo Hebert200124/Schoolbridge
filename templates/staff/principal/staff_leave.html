@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+{% block title %}Staff Leave - SchoolBridge{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h4 class="mb-1">Staff Leave</h4>
+        <p class="text-muted mb-0">Record and manage staff leave for your campus.</p>
+    </div>
+    <div>
+        <a href="{{ url_for('principal_dashboard') }}" class="btn btn-outline-primary"><i class="bi bi-arrow-left"></i> Back to Dashboard</a>
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-md-5">
+        <div class="card">
+            <div class="card-header"><h5 class="mb-0"><i class="bi bi-calendar-plus"></i> Record Leave</h5></div>
+            <div class="card-body">
+                <form method="POST">
+                    <div class="mb-3">
+                        <label class="form-label">Staff Member</label>
+                        <select class="form-select" name="staff_id" required>
+                            <option value="">-- Select Staff --</option>
+                            {% for s in staff_list %}
+                            <option value="{{ s.id }}">{{ s.full_name }} ({{ s.role }}){% if s.id in on_leave_ids %} - ON LEAVE{% endif %}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Leave Type</label>
+                        <select class="form-select" name="leave_type" required>
+                            <option value="">-- Select Type --</option>
+                            <option value="Annual">Annual</option>
+                            <option value="Sick">Sick</option>
+                            <option value="Maternity">Maternity</option>
+                            <option value="Study">Study</option>
+                            <option value="Unpaid">Unpaid</option>
+                            <option value="Other">Other</option>
+                        </select>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Start Date</label>
+                            <input type="date" class="form-control" name="start_date" required>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">End Date</label>
+                            <input type="date" class="form-control" name="end_date" required>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Reason</label>
+                        <textarea class="form-control" name="reason" rows="2"></textarea>
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100"><i class="bi bi-save"></i> Save Leave Record</button>
+                </form>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-7">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="bi bi-people"></i> Leave Records</h5>
+                <span class="badge bg-warning text-dark">{{ leaves|length }} total</span>
+            </div>
+            <div class="card-body p-0">
+                {% if leaves %}
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover mb-0">
+                        <thead>
+                            <tr>
+                                <th>Staff</th><th>Type</th><th>Dates</th><th>Reason</th><th>Status</th><th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for leave in leaves %}
+                            <tr>
+                                <td>{{ leave.staff.full_name }}</td>
+                                <td>{{ leave.leave_type }}</td>
+                                <td><small>{{ leave.start_date.strftime('%d %b %Y') }} - {{ leave.end_date.strftime('%d %b %Y') }}</small></td>
+                                <td><small>{{ leave.reason or '-' }}</small></td>
+                                <td>
+                                    <span class="badge bg-{{ 'success' if leave.status == 'Approved' else ('danger' if leave.status == 'Rejected' else 'secondary') }}">
+                                        {{ leave.status }}
+                                    </span>
+                                </td>
+                                <td>
+                                    {% if leave.status != 'Approved' %}
+                                    <form method="POST" action="{{ url_for('principal_leave_action', leave_id=leave.id, action='approve') }}" class="d-inline">
+                                        <button class="btn btn-sm btn-success"><i class="bi bi-check-lg"></i></button>
+                                    </form>
+                                    {% endif %}
+                                    {% if leave.status != 'Rejected' %}
+                                    <form method="POST" action="{{ url_for('principal_leave_action', leave_id=leave.id, action='reject') }}" class="d-inline">
+                                        <button class="btn btn-sm btn-warning"><i class="bi bi-x-lg"></i></button>
+                                    </form>
+                                    {% endif %}
+                                    <form method="POST" action="{{ url_for('principal_leave_action', leave_id=leave.id, action='delete') }}" class="d-inline" onsubmit="return confirm('Delete this leave record?')">
+                                        <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+                                    </form>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <p class="p-3 text-muted mb-0">No leave records yet.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

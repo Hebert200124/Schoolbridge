@@ -1,6 +1,6 @@
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session, g, abort
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
-from models import db, User, Student, Subject, StudentSubject, MonthlyTest, ExamMark, FeeAccount, Payment, FeeSetting, Timetable, ExamTimetable, PrincipalComment, TeacherRemark, ActivityLog, Activity, StaffLeave, LevyFund, OTPCode, Campus, zim_grade
+from models import db, User, Student, Subject, StudentSubject, MonthlyTest, ExamMark, FeeAccount, Payment, FeeSetting, Timetable, ExamTimetable, PrincipalComment, TeacherRemark, ActivityLog, Activity, StaffLeave, OTPCode, Campus, zim_grade
 from config import Config
 from functools import wraps
 from datetime import datetime, date, timedelta
@@ -45,7 +45,7 @@ CAMPUS_SCOPED_TABLES = [
     'users', 'students', 'subjects', 'monthly_tests', 'exam_marks',
     'principal_comments', 'fee_accounts', 'payments', 'fee_settings',
     'teacher_remarks', 'timetables', 'exam_timetables', 'activity_logs',
-    'activities', 'staff_leaves', 'levy_funds',
+    'activities', 'staff_leaves',
 ]
 
 
@@ -215,6 +215,23 @@ def compute_pass_rates(term, campus_id=None):
             form_pass_rates.append({'form': f, 'rate': round(passed / len(group) * 100, 1), 'total': len(group)})
 
     return pass_rates, form_pass_rates
+
+
+def compute_expected_fees(term, campus_id):
+    """Expected fees = one term fee per student (their account total if set,
+    otherwise the campus default for their form).
+
+    Previously this was the raw sum of FeeAccount.total_fees, which could
+    overcount when a student had duplicate accounts for the same term.
+    """
+    accounts = FeeAccount.query.filter(FeeAccount.term == term, FeeAccount.campus_id == campus_id).all()
+    by_student = {}
+    for a in accounts:
+        by_student[a.student_id] = a.total_fees
+    total = 0.0
+    for s in Student.query.filter_by(campus_id=campus_id, is_active=True).all():
+        total += by_student.get(s.id, get_term_fee(s.form, campus_id=campus_id))
+    return total
 
 
 @login_manager.user_loader
@@ -687,7 +704,7 @@ def staff_dashboard():
         term = 'Term 1'
         stats['term'] = term
         cid = current_user.campus_id
-        stats['total_expected'] = db.session.query(db.func.sum(FeeAccount.total_fees)).filter(FeeAccount.term == term, FeeAccount.campus_id == cid).scalar() or 0
+        stats['total_expected'] = compute_expected_fees(term, cid)
         stats['total_collected'] = db.session.query(db.func.sum(Payment.amount)).filter(Payment.cleared == True, Payment.campus_id == cid).scalar() or 0
         fee_accounts = FeeAccount.query.filter_by(term=term, campus_id=cid).all()
         stats['outstanding'] = sum(fa.balance for fa in fee_accounts if fa.balance > 0)
@@ -699,7 +716,6 @@ def staff_dashboard():
         stats['staff_on_leave'] = scoped(StaffLeave).filter(StaffLeave.status == 'Approved',
                                                            StaffLeave.end_date >= now_date).count()
         stats['pass_rates'], stats['form_pass_rates'] = compute_pass_rates(term, campus_id=cid)
-        stats['levies'] = scoped(LevyFund).filter_by(term=term).all()
         staff_leaves = scoped(StaffLeave).filter(StaffLeave.status == 'Approved',
                                                 StaffLeave.end_date >= now_date).count()
         stats['active_staff_count'] = stats['staff_count'] - staff_leaves
@@ -711,7 +727,7 @@ def staff_dashboard():
         stats['total_staff'] = scoped(User).filter(User.role.notin_(['principal', 'super_admin'])).count()
         stats['total_students'] = scoped(Student).count()
         stats['active_students'] = scoped(Student).filter_by(is_active=True).count()
-        stats['total_expected'] = db.session.query(db.func.sum(FeeAccount.total_fees)).filter(FeeAccount.term == term, FeeAccount.campus_id == cid).scalar() or 0
+        stats['total_expected'] = compute_expected_fees(term, cid)
         stats['total_collected'] = db.session.query(db.func.sum(Payment.amount)).filter(Payment.cleared == True, Payment.campus_id == cid).scalar() or 0
         fee_accounts = FeeAccount.query.filter_by(term=term, campus_id=cid).all()
         stats['outstanding'] = sum(fa.balance for fa in fee_accounts if fa.balance > 0)
@@ -726,7 +742,6 @@ def staff_dashboard():
         stats['recent_activities'] = scoped(ActivityLog).options(joinedload(ActivityLog.user), joinedload(ActivityLog.student)).order_by(ActivityLog.created_at.desc()).limit(10).all()
         stats['recent_activity_posts'] = scoped(Activity).options(joinedload(Activity.creator)).order_by(Activity.created_at.desc()).limit(10).all()
         stats['pass_rates'], stats['form_pass_rates'] = compute_pass_rates(term, campus_id=cid)
-        stats['levies'] = scoped(LevyFund).filter_by(term=term).all()
 
     return render_template('staff/dashboard.html', stats=stats)
 
@@ -1079,6 +1094,105 @@ def admin_add_student():
     return render_template('staff/admin/add_student.html', subjects=subjects, o_level=o_level, a_level=a_level, campuses=campuses)
 
 
+@app.route('/staff/admin/students/import', methods=['GET', 'POST'])
+@login_required
+@role_required('admin')
+def admin_import_students():
+    if request.method == 'POST':
+        file = request.files.get('file')
+        if not file or not file.filename:
+            flash('Please select an Excel file (.xlsx).', 'danger')
+            return redirect(url_for('admin_import_students'))
+        if not file.filename.lower().endswith(('.xlsx', '.xls')):
+            flash('Unsupported file type. Please upload an .xlsx file.', 'danger')
+            return redirect(url_for('admin_import_students'))
+        try:
+            import openpyxl
+            wb = openpyxl.load_workbook(file, read_only=True, data_only=True)
+        except Exception:
+            flash('Could not read the file. Ensure it is a valid Excel workbook.', 'danger')
+            return redirect(url_for('admin_import_students'))
+        ws = wb.active
+        rows = list(ws.iter_rows(values_only=True))
+        wb.close()
+        if not rows:
+            flash('The file is empty.', 'danger')
+            return redirect(url_for('admin_import_students'))
+
+        header = [str(c).strip().lower() if c is not None else '' for c in rows[0]]
+        required = ('first_name', 'last_name', 'form')
+        if not all(h in header for h in required):
+            flash('Required columns: first_name, last_name, form. Optional: curriculum, email, phone.', 'danger')
+            return redirect(url_for('admin_import_students'))
+        idx = {name: header.index(name) for name in ('first_name', 'last_name', 'form', 'curriculum', 'email', 'phone') if name in header}
+
+        target_campus_id = get_selected_campus_id()
+        term = get_current_term()
+        added = skipped = 0
+        for i, row in enumerate(rows[1:], start=2):
+            def get_val(name):
+                if name not in idx or idx[name] >= len(row):
+                    return None
+                v = row[idx[name]]
+                s = str(v).strip() if v is not None else ''
+                return s if s and s.lower() != 'none' else None
+
+            first_name = get_val('first_name')
+            last_name = get_val('last_name')
+            form = get_val('form')
+            if not first_name or not last_name or not form:
+                skipped += 1
+                continue
+            if form.isdigit():
+                form = f'Form {form}'
+            curriculum = (get_val('curriculum') or 'ZIMSEC').upper()
+            if curriculum not in ('ZIMSEC', 'CAMBRIDGE'):
+                curriculum = 'ZIMSEC'
+            email = get_val('email')
+            phone = get_val('phone')
+
+            student_id = generate_student_id()
+            student = Student(student_id=student_id, first_name=first_name, last_name=last_name,
+                              form=form, curriculum=curriculum, email=email, phone=phone,
+                              reg_number=f'REG{student_id}', campus_id=target_campus_id)
+            student.set_password('student123')
+            db.session.add(student)
+            db.session.flush()
+            term_fee = get_term_fee(form, campus_id=target_campus_id)
+            if term_fee > 0:
+                db.session.add(FeeAccount(student_id=student.id, term=term, campus_id=target_campus_id,
+                                          total_fees=term_fee, amount_paid=0.0, balance=term_fee))
+            added += 1
+
+        db.session.commit()
+        log_activity('Bulk students imported', f'{added} students added via Excel upload', user=current_user)
+        flash(f'Import complete: {added} student(s) added, {skipped} row(s) skipped. Default password: student123', 'success' if added else 'warning')
+        return redirect(url_for('admin_dashboard'))
+
+    return render_template('staff/admin/import_students.html')
+
+
+@app.route('/staff/admin/students/import/template')
+@login_required
+@role_required('admin')
+def admin_import_student_template():
+    import io
+    import openpyxl
+    buf = io.BytesIO()
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = 'Students'
+    ws.append(['first_name', 'last_name', 'form', 'curriculum', 'email', 'phone'])
+    ws.append(['Tendai', 'Moyo', 'Form 1', 'ZIMSEC', 'tendai@example.com', '0771111111'])
+    ws.append(['Chipo', 'Ncube', '2', 'CAMBRIDGE', 'chipo@example.com', '0772222222'])
+    for col, width in zip('ABCDEF', [16, 16, 10, 12, 26, 14]):
+        ws.column_dimensions[col].width = width
+    wb.save(buf)
+    buf.seek(0)
+    return app.response_class(buf.getvalue(), mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                              headers={'Content-Disposition': 'attachment; filename=student_template.xlsx'})
+
+
 @app.route('/staff/admin/student/edit/<int:student_id>', methods=['GET', 'POST'])
 @login_required
 @role_required('admin')
@@ -1363,6 +1477,75 @@ def principal_toggle_student_status(student_id):
     return redirect(url_for('principal_dashboard'))
 
 
+@app.route('/staff/principal/staff/leave', methods=['GET', 'POST'])
+@login_required
+@role_required('principal')
+def principal_staff_leave():
+    cid = current_user.campus_id
+    staff_list = scoped(User).filter(User.role.notin_(['principal', 'super_admin'])).order_by(User.full_name).all()
+    now_date = date.today()
+
+    if request.method == 'POST':
+        staff_id = request.form.get('staff_id')
+        leave_type = request.form.get('leave_type')
+        start_date = request.form.get('start_date')
+        end_date = request.form.get('end_date')
+        reason = request.form.get('reason')
+        if not staff_id or not leave_type or not start_date or not end_date:
+            flash('Please fill in all required fields.', 'danger')
+            return redirect(url_for('principal_staff_leave'))
+        staff_member = scoped_get_or_404(User, int(staff_id))
+        if start_date > end_date:
+            flash('Start date cannot be after end date.', 'danger')
+            return redirect(url_for('principal_staff_leave'))
+        leave = StaffLeave(
+            campus_id=cid, user_id=staff_member.id, leave_type=leave_type,
+            start_date=datetime.strptime(start_date, '%Y-%m-%d').date(),
+            end_date=datetime.strptime(end_date, '%Y-%m-%d').date(),
+            status='Approved', reason=reason or None
+        )
+        db.session.add(leave)
+        db.session.commit()
+        log_activity('Staff leave recorded',
+                     f'{staff_member.full_name} on {leave_type} leave '
+                     f'({start_date} to {end_date})', user=current_user, campus_id=cid)
+        flash(f'Leave recorded for {staff_member.full_name}.', 'success')
+        return redirect(url_for('principal_staff_leave'))
+
+    leaves = scoped(StaffLeave).order_by(StaffLeave.created_at.desc()).options(joinedload(StaffLeave.staff)).all()
+    on_leave_ids = {l.user_id for l in leaves
+                    if l.status == 'Approved' and l.start_date <= now_date <= l.end_date}
+    return render_template('staff/principal/staff_leave.html', staff_list=staff_list,
+                           leaves=leaves, on_leave_ids=on_leave_ids, now_date=now_date)
+
+
+@app.route('/staff/principal/staff/leave/<int:leave_id>/<string:action>', methods=['POST'])
+@login_required
+@role_required('principal')
+def principal_leave_action(leave_id, action):
+    leave = scoped_get_or_404(StaffLeave, leave_id)
+    if action == 'approve':
+        leave.status = 'Approved'
+        flash(f'{leave.staff.full_name}\'s leave approved.', 'success')
+    elif action == 'reject':
+        leave.status = 'Rejected'
+        flash(f'{leave.staff.full_name}\'s leave rejected.', 'warning')
+    elif action == 'delete':
+        name = leave.staff.full_name
+        db.session.delete(leave)
+        db.session.commit()
+        flash(f'Leave record for {name} deleted.', 'info')
+        return redirect(url_for('principal_staff_leave'))
+    else:
+        flash('Unknown action.', 'danger')
+        return redirect(url_for('principal_staff_leave'))
+    db.session.commit()
+    log_activity(f'Staff leave {leave.status.lower()}',
+                 f'{leave.staff.full_name} ({leave.leave_type})', user=current_user,
+                 campus_id=current_user.campus_id)
+    return redirect(url_for('principal_staff_leave'))
+
+
 def _block_super_admin():
     """Timetable management is reserved for campus principals."""
     if getattr(current_user, 'role', '') == 'super_admin':
@@ -1544,7 +1727,7 @@ def export_ministry_report():
         f = student_form.get(e.student_id)
         if f:
             by_form.setdefault(f, []).append(e)
-    fee_total = db.session.query(db.func.sum(FeeAccount.total_fees)).filter(FeeAccount.term == term, FeeAccount.campus_id == current_user.campus_id).scalar() or 0
+    fee_total = compute_expected_fees(term, current_user.campus_id)
     fee_collected = db.session.query(db.func.sum(Payment.amount)).filter(Payment.cleared == True, Payment.campus_id == current_user.campus_id).scalar() or 0
     outstanding_fees = fee_total - fee_collected
     for f in forms:

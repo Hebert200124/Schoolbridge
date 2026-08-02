@@ -59,7 +59,7 @@ def main():
             scoped_tables = ['users', 'students', 'subjects', 'monthly_tests', 'exam_marks',
                              'principal_comments', 'fee_accounts', 'payments', 'fee_settings',
                              'teacher_remarks', 'timetables', 'exam_timetables', 'activity_logs',
-                             'activities', 'staff_leaves', 'levy_funds']
+                             'activities', 'staff_leaves']
             for table in scoped_tables:
                 if table not in inspector_tables:
                     continue

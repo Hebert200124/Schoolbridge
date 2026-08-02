@@ -20,3 +20,4 @@ sib-api-v3-sdk==7.6.0
 colorama==0.4.6
 idna==3.18
 dnspython==2.8.0
+openpyxl==3.1.5

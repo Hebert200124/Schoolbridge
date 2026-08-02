@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}Import Students - SchoolBridge{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h4 class="mb-1">Import Students from Excel</h4>
+        <p class="text-muted mb-0">Bulk-upload students using an .xlsx file.</p>
+    </div>
+    <div>
+        <a href="{{ url_for('admin_dashboard') }}" class="btn btn-outline-primary"><i class="bi bi-arrow-left"></i> Back to Dashboard</a>
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header"><h5 class="mb-0"><i class="bi bi-file-earmark-arrow-up"></i> Upload File</h5></div>
+            <div class="card-body">
+                <form method="POST" enctype="multipart/form-data">
+                    <div class="mb-3">
+                        <label class="form-label">Excel File (.xlsx)</label>
+                        <input type="file" class="form-control" name="file" accept=".xlsx,.xls" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100"><i class="bi bi-upload"></i> Upload & Import</button>
+                </form>
+                <hr>
+                <p class="text-muted small mb-2">Download a template to see the required columns and a sample row.</p>
+                <a href="{{ url_for('admin_import_student_template') }}" class="btn btn-outline-secondary w-100"><i class="bi bi-download"></i> Download Template</a>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header"><h5 class="mb-0"><i class="bi bi-info-circle"></i> File Format</h5></div>
+            <div class="card-body">
+                <p class="mb-2">The first row must be a header. Required columns:</p>
+                <ul>
+                    <li><code>first_name</code> - student first name</li>
+                    <li><code>last_name</code> - student last name</li>
+                    <li><code>form</code> - e.g. "Form 1" (a plain number like 2 is converted)</li>
+                </ul>
+                <p class="mb-2">Optional columns:</p>
+                <ul>
+                    <li><code>curriculum</code> - ZIMSEC or CAMBRIDGE (defaults to ZIMSEC)</li>
+                    <li><code>email</code>, <code>phone</code></li>
+                </ul>
+                <p class="text-muted small mb-0">
+                    Student IDs and registration numbers are generated automatically. Each student is created
+                    with default password <code>student123</code> and a fee account for the current term.
+                    Rows missing required fields are skipped.
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

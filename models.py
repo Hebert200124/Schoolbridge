@@ -357,24 +357,6 @@ class StaffLeave(db.Model):
     staff = db.relationship('User', backref='leaves', foreign_keys=[user_id])
 
 
-class LevyFund(db.Model):
-    __tablename__ = 'levy_funds'
-
-    id = db.Column(db.Integer, primary_key=True)
-    campus_id = db.Column(db.Integer, db.ForeignKey('campuses.id'), nullable=False, index=True)
-    name = db.Column(db.String(100), nullable=False)
-    total_amount = db.Column(db.Float, default=0.0)
-    amount_collected = db.Column(db.Float, default=0.0)
-    term = db.Column(db.String(10), nullable=False, index=True)
-    academic_year = db.Column(db.String(10), default=lambda: str(datetime.now().year), index=True)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-
-    @property
-    def balance(self):
-        return self.total_amount - self.amount_collected
-
-
 class OTPCode(db.Model):
     __tablename__ = 'otp_codes'
     __table_args__ = (

@@ -347,32 +347,6 @@
 
 <div class="row g-3 mb-4">
     <div class="col-md-6">
-        <div class="card">
-            <div class="card-header"><h6 class="mb-0"><i class="bi bi-piggy-bank"></i> Levy / Development Fund Tracking</h6></div>
-            <div class="card-body p-0">
-                {% if stats.levies %}
-                <div class="table-responsive">
-                    <table class="table table-sm mb-0">
-                        <thead><tr><th>Fund</th><th>Target</th><th>Collected</th><th>Balance</th></tr></thead>
-                        <tbody>
-                            {% for levy in stats.levies %}
-                            <tr>
-                                <td>{{ levy.name }}</td>
-                                <td>${{ "%.2f"|format(levy.total_amount) }}</td>
-                                <td>${{ "%.2f"|format(levy.amount_collected) }}</td>
-                                <td class="{% if levy.balance > 0 %}text-danger{% else %}text-success{% endif %}">${{ "%.2f"|format(levy.balance) }}</td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-                {% else %}
-                <div class="p-3 text-muted">No levies set for this term.</div>
-                {% endif %}
-            </div>
-        </div>
-    </div>
-    <div class="col-md-3">
         <div class="card h-100">
             <div class="card-body text-center">
                 <h6 class="text-muted"><i class="bi bi-download"></i> Reports</h6>

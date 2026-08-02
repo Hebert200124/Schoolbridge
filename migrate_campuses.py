@@ -36,7 +36,7 @@ CAMPUS_SCOPED_TABLES = [
     'users', 'students', 'subjects', 'monthly_tests', 'exam_marks',
     'principal_comments', 'fee_accounts', 'payments', 'fee_settings',
     'teacher_remarks', 'timetables', 'exam_timetables', 'activity_logs',
-    'activities', 'staff_leaves', 'levy_funds',
+    'activities', 'staff_leaves',
 ]
 
 OLD_UNIQUE_CONSTRAINTS = [
