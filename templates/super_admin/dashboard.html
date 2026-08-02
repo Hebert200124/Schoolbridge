@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block title %}Super Admin Dashboard - SchoolBridge{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h4 class="mb-1">Super Admin Overview</h4>
+        <p class="text-muted mb-0">Welcome, {{ current_user.full_name }}. Manage all campuses.</p>
+    </div>
+    <div>
+        <a href="{{ url_for('super_admin_campuses') }}" class="btn btn-primary"><i class="bi bi-building-add"></i> Manage Campuses</a>
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-md-3">
+        <div class="card">
+            <div class="card-body">
+                <h6 class="text-muted">Campuses</h6>
+                <h3>{{ total_campuses }}</h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card">
+            <div class="card-body">
+                <h6 class="text-muted">Total Students</h6>
+                <h3>{{ total_students }}</h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card">
+            <div class="card-body">
+                <h6 class="text-muted">Total Staff</h6>
+                <h3>{{ total_staff }}</h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card">
+            <div class="card-body">
+                <h6 class="text-muted">Fees Collected</h6>
+                <h3>${{ '%.2f'|format(total_payments) }}</h3>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="bi bi-buildings"></i> Campuses</h5>
+                <a href="{{ url_for('super_admin_campuses') }}" class="btn btn-sm btn-primary">View All</a>
+            </div>
+            <div class="card-body">
+                {% if campuses %}
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr><th>Name</th><th>Code</th><th>Address</th><th>Students</th><th>Staff</th><th>Actions</th></tr>
+                        </thead>
+                        <tbody>
+                            {% for c in campuses %}
+                            <tr>
+                                <td><strong>{{ c.name }}</strong></td>
+                                <td><span class="badge bg-secondary">{{ c.code }}</span></td>
+                                <td><small>{{ c.address or '-' }}</small></td>
+                                <td>{{ c.student_count }}</td>
+                                <td>{{ c.staff_count }}</td>
+                                <td>
+                                    <a href="{{ url_for('super_admin_campus_staff', campus_id=c.id) }}" class="btn btn-sm btn-outline-primary"><i class="bi bi-people"></i> Staff</a>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <p class="text-muted">No campuses yet. Create one from the Campuses page.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,6 +1,6 @@
-from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session
+from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session, g, abort
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
-from models import db, User, Student, Subject, StudentSubject, MonthlyTest, ExamMark, FeeAccount, Payment, FeeSetting, Timetable, ExamTimetable, PrincipalComment, TeacherRemark, ActivityLog, Activity, StaffLeave, LevyFund, OTPCode, zim_grade
+from models import db, User, Student, Subject, StudentSubject, MonthlyTest, ExamMark, FeeAccount, Payment, FeeSetting, Timetable, ExamTimetable, PrincipalComment, TeacherRemark, ActivityLog, Activity, StaffLeave, LevyFund, OTPCode, Campus, zim_grade
 from config import Config
 from functools import wraps
 from datetime import datetime, date, timedelta
@@ -40,6 +40,47 @@ if _Limiter is not None:
 else:
     limiter = _NoopLimiter()
 
+
+CAMPUS_SCOPED_TABLES = [
+    'users', 'students', 'subjects', 'monthly_tests', 'exam_marks',
+    'principal_comments', 'fee_accounts', 'payments', 'fee_settings',
+    'teacher_remarks', 'timetables', 'exam_timetables', 'activity_logs',
+    'activities', 'staff_leaves', 'levy_funds',
+]
+
+
+def _ensure_campus_columns():
+    """Idempotently add campus_id to existing tables and backfill to Main Campus.
+
+    Runs on every boot so existing databases (local SQLite and production
+    Postgres on Render) gain the multi-campus columns without downtime.
+    Fresh databases already get them from db.create_all(). The standalone
+    migrate_campuses.py script additionally adds the FK constraints and swaps
+    the old global unique constraints for per-campus ones on Postgres.
+    """
+    try:
+        if 'campuses' not in inspect(db.engine).get_table_names():
+            return
+        main = Campus.query.filter_by(code='MAIN').first()
+        if not main:
+            main = Campus(name='Main Campus', code='MAIN', address='')
+            db.session.add(main)
+            db.session.flush()
+        for table in CAMPUS_SCOPED_TABLES:
+            inspector = inspect(db.engine)
+            if table not in inspector.get_table_names():
+                continue
+            cols = {c['name'] for c in inspector.get_columns(table)}
+            if 'campus_id' in cols:
+                continue
+            db.session.execute(text(f'ALTER TABLE {table} ADD COLUMN campus_id INTEGER'))
+            db.session.execute(text(f'UPDATE {table} SET campus_id = :cid WHERE campus_id IS NULL'),
+                               {'cid': main.id})
+        db.session.commit()
+    except Exception as exc:
+        db.session.rollback()
+        print(f'[migration] campus columns skipped: {exc}')
+
 db.init_app(app)
 with app.app_context():
     db.create_all()
@@ -60,6 +101,8 @@ with app.app_context():
                 with db.engine.connect() as conn:
                     conn.execute(text('ALTER TABLE otp_codes ALTER COLUMN phone TYPE VARCHAR(255)'))
                     conn.commit()
+
+    _ensure_campus_columns()
 
 
 
@@ -84,8 +127,12 @@ def generate_student_id():
     return f'{prefix}{max_num + 1:03d}'
 
 
-def log_activity(action, description=None, user=None, student=None, visibility='public'):
+def log_activity(action, description=None, user=None, student=None, visibility='public', campus_id=None):
+    if campus_id is None:
+        campus_id = (getattr(user, 'campus_id', None) or getattr(student, 'campus_id', None)
+                     or getattr(g, 'current_campus_id', None))
     entry = ActivityLog(action=action, description=description, visibility=visibility,
+                        campus_id=campus_id,
                         user_id=user.id if user else None,
                         student_id=student.id if student else None)
     db.session.add(entry)
@@ -103,8 +150,9 @@ def get_current_term():
     return 'Term 1'
 
 
-def get_term_fee(form):
-    fs = FeeSetting.query.filter_by(form=form).first()
+def get_term_fee(form, campus_id=None):
+    campus_id = campus_id or getattr(g, 'current_campus_id', None)
+    fs = FeeSetting.query.filter_by(form=form, campus_id=campus_id).first()
     return fs.term_fee if fs else 0.0
 
 
@@ -113,28 +161,32 @@ def get_detected_fee(student, term=None):
     fee_account = FeeAccount.query.filter_by(student_id=student.id, term=term).first()
     if fee_account:
         return fee_account.total_fees
-    return get_term_fee(student.form)
+    return get_term_fee(student.form, campus_id=student.campus_id)
 
 
 def ensure_fee_account(student, term=None, amount_paid=0.0):
     term = term or get_current_term()
     fee_account = FeeAccount.query.filter_by(student_id=student.id, term=term).first()
     if not fee_account:
-        total = get_term_fee(student.form)
-        fee_account = FeeAccount(student_id=student.id, term=term,
+        total = get_term_fee(student.form, campus_id=student.campus_id)
+        fee_account = FeeAccount(student_id=student.id, campus_id=student.campus_id, term=term,
                                  total_fees=total, amount_paid=amount_paid, balance=total - amount_paid)
         db.session.add(fee_account)
     return fee_account
 
 
-def compute_pass_rates(term):
+def compute_pass_rates(term, campus_id=None):
     """Compute per-subject and per-form pass rates with 3 queries total.
 
     Previously this looped over every subject and every form, firing one query
-    per iteration (the classic N+1 pattern on the dashboards).
+    per iteration (the classic N+1 pattern on the dashboards). Scoped to a
+    single campus; None means all campuses (super_admin).
     """
-    subjects = Subject.query.all()
-    exams = ExamMark.query.filter_by(term=term).all()
+    if campus_id is None:
+        campus_id = getattr(g, 'current_campus_id', None)
+    subjects = Subject.query.filter_by(campus_id=campus_id).all() if campus_id else Subject.query.all()
+    exams = (ExamMark.query.filter_by(term=term, campus_id=campus_id).all() if campus_id
+             else ExamMark.query.filter_by(term=term).all())
 
     by_subject = {}
     for e in exams:
@@ -147,7 +199,8 @@ def compute_pass_rates(term):
             passed = sum(1 for e in group if e.total_marks > 0 and e.marks / e.total_marks * 100 >= 50)
             pass_rates.append({'subject': subj.name, 'rate': round(passed / len(group) * 100, 1), 'total': len(group)})
 
-    student_form = {s.id: s.form for s in Student.query.all()}
+    students = Student.query.filter_by(campus_id=campus_id).all() if campus_id else Student.query.all()
+    student_form = {s.id: s.form for s in students}
     by_form = {}
     for e in exams:
         f = student_form.get(e.student_id)
@@ -180,12 +233,24 @@ def role_required(*roles):
             if isinstance(current_user, Student):
                 flash('Access denied. Staff only.', 'danger')
                 return redirect(url_for('student_dashboard'))
-            if current_user.role not in roles:
+            if current_user.role not in roles and current_user.role != 'super_admin':
                 flash('Access denied.', 'danger')
                 return redirect(url_for('staff_dashboard'))
             return f(*args, **kwargs)
         return decorated_function
     return decorator
+
+
+def super_admin_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not current_user.is_authenticated:
+            return redirect(url_for('auth_login'))
+        if not isinstance(current_user, User) or getattr(current_user, 'role', '') != 'super_admin':
+            flash('Access denied. Super admin only.', 'danger')
+            return redirect(url_for('staff_dashboard'))
+        return f(*args, **kwargs)
+    return decorated_function
 
 
 def student_required(f):
@@ -200,6 +265,54 @@ def student_required(f):
     return decorated_function
 
 
+@app.before_request
+def _set_campus_context():
+    """Expose the current user's campus to the scoped() query helper."""
+    if current_user.is_authenticated:
+        g.current_campus_id = getattr(current_user, 'campus_id', None)
+        g.is_super_admin = getattr(current_user, 'role', '') == 'super_admin'
+    else:
+        g.current_campus_id = None
+        g.is_super_admin = False
+
+
+def scoped(model):
+    """Return a query over `model` limited to the logged-in user's campus.
+
+    - super_admin sees every campus (no filter applied).
+    - Staff/students only ever see rows where campus_id matches theirs.
+    - Outside a request (login lookups, seeding, migrations) no filter is
+      applied so global operations keep working.
+    """
+    if getattr(g, 'is_super_admin', False):
+        return model.query
+    cid = getattr(g, 'current_campus_id', None)
+    if cid is not None and hasattr(model, 'campus_id'):
+        return model.query.filter(model.campus_id == cid)
+    return model.query
+
+
+def scoped_get_or_404(model, obj_id):
+    """get_or_404 that respects campus isolation (other-campus ids 404)."""
+    obj = scoped(model).filter(model.id == obj_id).first()
+    if obj is None:
+        abort(404)
+    return obj
+
+
+def get_selected_campus_id():
+    """Campus that new records should be attached to.
+
+    super_admin may pick any campus via the `campus_id` form field; everyone
+    else is always bound to their own campus.
+    """
+    if getattr(g, 'is_super_admin', False):
+        cid = request.form.get('campus_id', type=int)
+        if cid and Campus.query.get(cid):
+            return cid
+    return getattr(current_user, 'campus_id', None)
+
+
 # ============ AUTH ROUTES ============
 
 @app.route('/')
@@ -207,6 +320,8 @@ def index():
     if current_user.is_authenticated:
         if isinstance(current_user, Student):
             return redirect(url_for('student_dashboard'))
+        if getattr(current_user, 'role', '') == 'super_admin':
+            return redirect(url_for('super_admin_dashboard'))
         return redirect(url_for('staff_dashboard'))
     return redirect(url_for('auth_login'))
 
@@ -217,6 +332,8 @@ def auth_login():
     if current_user.is_authenticated:
         if isinstance(current_user, Student):
             return redirect(url_for('student_dashboard'))
+        if getattr(current_user, 'role', '') == 'super_admin':
+            return redirect(url_for('super_admin_dashboard'))
         return redirect(url_for('staff_dashboard'))
 
     if request.method == 'POST':
@@ -239,6 +356,8 @@ def auth_login():
                 return render_template('auth/login.html')
             login_user(user)
             flash(f'Welcome {user.full_name}!', 'success')
+            if user.role == 'super_admin':
+                return redirect(url_for('super_admin_dashboard'))
             return redirect(url_for('staff_dashboard'))
 
         flash('Invalid username or password', 'danger')
@@ -547,63 +666,67 @@ def auth_reset_set_password():
 def staff_dashboard():
     if isinstance(current_user, Student):
         return redirect(url_for('student_dashboard'))
+    if getattr(current_user, 'role', '') == 'super_admin':
+        return redirect(url_for('super_admin_dashboard'))
 
     stats = {}
     if current_user.role == 'teacher':
         subj = current_user.teacher_subject
         stats['subject_name'] = subj.name if subj else 'Not assigned'
         stats['student_count'] = StudentSubject.query.filter_by(subject_id=current_user.subject_id).count() if current_user.subject_id else 0
-        stats['activities_count'] = Activity.query.count()
-        stats['recent_activity_posts'] = Activity.query.order_by(Activity.created_at.desc()).limit(10).all()
+        stats['activities_count'] = scoped(Activity).count()
+        stats['recent_activity_posts'] = scoped(Activity).order_by(Activity.created_at.desc()).limit(10).all()
     elif current_user.role == 'cashier':
-        stats['pending_clearance'] = Payment.query.filter_by(cleared=False).count()
-        stats['total_payments_today'] = Payment.query.filter(db.func.date(Payment.created_at) == date.today()).count()
-        stats['recent_activity_posts'] = Activity.query.order_by(Activity.created_at.desc()).limit(10).all()
+        stats['pending_clearance'] = scoped(Payment).filter_by(cleared=False).count()
+        stats['total_payments_today'] = scoped(Payment).filter(db.func.date(Payment.created_at) == date.today()).count()
+        stats['recent_activity_posts'] = scoped(Activity).order_by(Activity.created_at.desc()).limit(10).all()
     elif current_user.role == 'admin':
-        stats['total_students'] = Student.query.count()
-        stats['active_students'] = Student.query.filter_by(is_active=True).count()
-        stats['staff_count'] = User.query.filter(User.role != 'principal').count()
+        stats['total_students'] = scoped(Student).count()
+        stats['active_students'] = scoped(Student).filter_by(is_active=True).count()
+        stats['staff_count'] = scoped(User).filter(User.role.notin_(['principal', 'super_admin'])).count()
         term = 'Term 1'
         stats['term'] = term
-        stats['total_expected'] = db.session.query(db.func.sum(FeeAccount.total_fees)).filter_by(term=term).scalar() or 0
-        stats['total_collected'] = db.session.query(db.func.sum(Payment.amount)).filter(Payment.cleared == True).scalar() or 0
-        fee_accounts = FeeAccount.query.filter_by(term=term).all()
+        cid = current_user.campus_id
+        stats['total_expected'] = db.session.query(db.func.sum(FeeAccount.total_fees)).filter(FeeAccount.term == term, FeeAccount.campus_id == cid).scalar() or 0
+        stats['total_collected'] = db.session.query(db.func.sum(Payment.amount)).filter(Payment.cleared == True, Payment.campus_id == cid).scalar() or 0
+        fee_accounts = FeeAccount.query.filter_by(term=term, campus_id=cid).all()
         stats['outstanding'] = sum(fa.balance for fa in fee_accounts if fa.balance > 0)
-        stats['outstanding_list'] = FeeAccount.query.filter(FeeAccount.term == term, FeeAccount.balance > 0).order_by(FeeAccount.balance.desc()).options(joinedload(FeeAccount.student)).all()
+        stats['outstanding_list'] = FeeAccount.query.filter(FeeAccount.term == term, FeeAccount.balance > 0, FeeAccount.campus_id == cid).order_by(FeeAccount.balance.desc()).options(joinedload(FeeAccount.student)).all()
         now_date = date.today()
-        stats['upcoming_exams'] = ExamTimetable.query.filter(ExamTimetable.exam_date >= now_date).order_by(ExamTimetable.exam_date).options(joinedload(ExamTimetable.subject_rel)).limit(5).all()
-        stats['recent_activities'] = ActivityLog.query.options(joinedload(ActivityLog.user), joinedload(ActivityLog.student)).order_by(ActivityLog.created_at.desc()).limit(10).all()
-        stats['recent_activity_posts'] = Activity.query.options(joinedload(Activity.creator)).order_by(Activity.created_at.desc()).limit(10).all()
-        stats['staff_on_leave'] = StaffLeave.query.filter(StaffLeave.status == 'Approved',
+        stats['upcoming_exams'] = scoped(ExamTimetable).filter(ExamTimetable.exam_date >= now_date).order_by(ExamTimetable.exam_date).options(joinedload(ExamTimetable.subject_rel)).limit(5).all()
+        stats['recent_activities'] = scoped(ActivityLog).options(joinedload(ActivityLog.user), joinedload(ActivityLog.student)).order_by(ActivityLog.created_at.desc()).limit(10).all()
+        stats['recent_activity_posts'] = scoped(Activity).options(joinedload(Activity.creator)).order_by(Activity.created_at.desc()).limit(10).all()
+        stats['staff_on_leave'] = scoped(StaffLeave).filter(StaffLeave.status == 'Approved',
                                                            StaffLeave.end_date >= now_date).count()
-        stats['pass_rates'], stats['form_pass_rates'] = compute_pass_rates(term)
-        stats['levies'] = LevyFund.query.filter_by(term=term).all()
-        staff_leaves = StaffLeave.query.filter(StaffLeave.status == 'Approved',
+        stats['pass_rates'], stats['form_pass_rates'] = compute_pass_rates(term, campus_id=cid)
+        stats['levies'] = scoped(LevyFund).filter_by(term=term).all()
+        staff_leaves = scoped(StaffLeave).filter(StaffLeave.status == 'Approved',
                                                 StaffLeave.end_date >= now_date).count()
         stats['active_staff_count'] = stats['staff_count'] - staff_leaves
         stats['staff_on_leave_count'] = staff_leaves
     elif current_user.role == 'principal':
         term = 'Term 1'
         stats['term'] = term
-        stats['total_staff'] = User.query.filter(User.role != 'principal').count()
-        stats['total_students'] = Student.query.count()
-        stats['active_students'] = Student.query.filter_by(is_active=True).count()
-        stats['total_expected'] = db.session.query(db.func.sum(FeeAccount.total_fees)).filter_by(term=term).scalar() or 0
-        stats['total_collected'] = db.session.query(db.func.sum(Payment.amount)).filter(Payment.cleared == True).scalar() or 0
-        fee_accounts = FeeAccount.query.filter_by(term=term).all()
+        cid = current_user.campus_id
+        stats['total_staff'] = scoped(User).filter(User.role.notin_(['principal', 'super_admin'])).count()
+        stats['total_students'] = scoped(Student).count()
+        stats['active_students'] = scoped(Student).filter_by(is_active=True).count()
+        stats['total_expected'] = db.session.query(db.func.sum(FeeAccount.total_fees)).filter(FeeAccount.term == term, FeeAccount.campus_id == cid).scalar() or 0
+        stats['total_collected'] = db.session.query(db.func.sum(Payment.amount)).filter(Payment.cleared == True, Payment.campus_id == cid).scalar() or 0
+        fee_accounts = FeeAccount.query.filter_by(term=term, campus_id=cid).all()
         stats['outstanding'] = sum(fa.balance for fa in fee_accounts if fa.balance > 0)
-        stats['outstanding_list'] = FeeAccount.query.filter(FeeAccount.term == term, FeeAccount.balance > 0).order_by(FeeAccount.balance.desc()).options(joinedload(FeeAccount.student)).all()
-        active_staff = User.query.filter(User.role != 'principal', User.is_active == True).count()
-        staff_on_leave_count = StaffLeave.query.filter(StaffLeave.status == 'Approved',
+        stats['outstanding_list'] = FeeAccount.query.filter(FeeAccount.term == term, FeeAccount.balance > 0, FeeAccount.campus_id == cid).order_by(FeeAccount.balance.desc()).options(joinedload(FeeAccount.student)).all()
+        active_staff = scoped(User).filter(User.role.notin_(['principal', 'super_admin']), User.is_active == True).count()
+        staff_on_leave_count = scoped(StaffLeave).filter(StaffLeave.status == 'Approved',
                                                         StaffLeave.end_date >= date.today()).count()
         stats['active_staff_count'] = active_staff
         stats['staff_on_leave_count'] = staff_on_leave_count
         now_date = date.today()
-        stats['upcoming_exams'] = ExamTimetable.query.filter(ExamTimetable.exam_date >= now_date).order_by(ExamTimetable.exam_date).options(joinedload(ExamTimetable.subject_rel)).limit(5).all()
-        stats['recent_activities'] = ActivityLog.query.options(joinedload(ActivityLog.user), joinedload(ActivityLog.student)).order_by(ActivityLog.created_at.desc()).limit(10).all()
-        stats['recent_activity_posts'] = Activity.query.options(joinedload(Activity.creator)).order_by(Activity.created_at.desc()).limit(10).all()
-        stats['pass_rates'], stats['form_pass_rates'] = compute_pass_rates(term)
-        stats['levies'] = LevyFund.query.filter_by(term=term).all()
+        stats['upcoming_exams'] = scoped(ExamTimetable).filter(ExamTimetable.exam_date >= now_date).order_by(ExamTimetable.exam_date).options(joinedload(ExamTimetable.subject_rel)).limit(5).all()
+        stats['recent_activities'] = scoped(ActivityLog).options(joinedload(ActivityLog.user), joinedload(ActivityLog.student)).order_by(ActivityLog.created_at.desc()).limit(10).all()
+        stats['recent_activity_posts'] = scoped(Activity).options(joinedload(Activity.creator)).order_by(Activity.created_at.desc()).limit(10).all()
+        stats['pass_rates'], stats['form_pass_rates'] = compute_pass_rates(term, campus_id=cid)
+        stats['levies'] = scoped(LevyFund).filter_by(term=term).all()
 
     return render_template('staff/dashboard.html', stats=stats)
 
@@ -611,7 +734,7 @@ def staff_dashboard():
 @app.route('/staff/activities')
 @login_required
 def staff_activities():
-    activities = ActivityLog.query.order_by(ActivityLog.created_at.desc()).all()
+    activities = scoped(ActivityLog).order_by(ActivityLog.created_at.desc()).all()
     return render_template('staff/activities.html', activities=activities)
 
 
@@ -625,10 +748,10 @@ def teacher_class():
         flash('No subject assigned.', 'warning')
         return redirect(url_for('staff_dashboard'))
 
-    subject = Subject.query.get(current_user.subject_id)
+    subject = scoped_get_or_404(Subject, current_user.subject_id)
     student_subjects = StudentSubject.query.filter_by(subject_id=current_user.subject_id).all()
-    students = [ss.student for ss in student_subjects if ss.student.is_active]
-    recent_activities = ActivityLog.query.order_by(ActivityLog.created_at.desc()).limit(5).all()
+    students = [ss.student for ss in student_subjects if ss.student.is_active and ss.student.campus_id == current_user.campus_id]
+    recent_activities = scoped(ActivityLog).order_by(ActivityLog.created_at.desc()).limit(5).all()
 
     return render_template('staff/teacher/class.html', subject=subject, students=students, recent_activities=recent_activities)
 
@@ -637,10 +760,10 @@ def teacher_class():
 @login_required
 @role_required('teacher')
 def teacher_student_results(student_id):
-    student = Student.query.get_or_404(student_id)
+    student = scoped_get_or_404(Student, student_id)
     monthly_tests = MonthlyTest.query.filter_by(student_id=student.id, subject_id=current_user.subject_id).order_by(MonthlyTest.academic_year.desc(), MonthlyTest.term).all()
     exam_marks = ExamMark.query.filter_by(student_id=student.id, subject_id=current_user.subject_id).order_by(ExamMark.academic_year.desc(), ExamMark.term).all()
-    subject = Subject.query.get(current_user.subject_id)
+    subject = scoped_get_or_404(Subject, current_user.subject_id)
     return render_template('staff/teacher/student_results.html', student=student, monthly_tests=monthly_tests, exam_marks=exam_marks, subject=subject)
 
 
@@ -652,9 +775,9 @@ def teacher_marks():
         flash('No subject assigned.', 'warning')
         return redirect(url_for('staff_dashboard'))
 
-    subject = Subject.query.get(current_user.subject_id)
+    subject = scoped_get_or_404(Subject, current_user.subject_id)
     student_subjects = StudentSubject.query.filter_by(subject_id=current_user.subject_id).all()
-    students = [ss.student for ss in student_subjects if ss.student.is_active]
+    students = [ss.student for ss in student_subjects if ss.student.is_active and ss.student.campus_id == current_user.campus_id]
     monthly_tests = MonthlyTest.query.filter_by(subject_id=current_user.subject_id).all()
     exam_marks_list = ExamMark.query.filter_by(subject_id=current_user.subject_id).all()
 
@@ -681,7 +804,7 @@ def teacher_add_mark():
     academic_year = request.form.get('academic_year', str(datetime.now().year))
     comment = request.form.get('comment')
 
-    student = Student.query.get(student_id)
+    student = scoped(Student).filter_by(id=student_id).first()
     if not student:
         flash('Student not found.', 'danger')
         return redirect(url_for('teacher_marks'))
@@ -689,6 +812,7 @@ def teacher_add_mark():
     if mark_type == 'monthly':
         test = MonthlyTest(
             student_id=student.id, subject_id=current_user.subject_id,
+            campus_id=current_user.campus_id,
             term=term, academic_year=academic_year, month=month,
             marks=marks, total_marks=total_marks, teacher_id=current_user.id,
             comment=comment or None
@@ -697,6 +821,7 @@ def teacher_add_mark():
     elif mark_type == 'exam':
         exam = ExamMark(
             student_id=student.id, subject_id=current_user.subject_id,
+            campus_id=current_user.campus_id,
             term=term, academic_year=academic_year, exam_type=exam_type,
             marks=marks, total_marks=total_marks, teacher_id=current_user.id,
             comment=comment or None
@@ -719,7 +844,7 @@ def teacher_edit_mark(mark_id):
     comment = request.form.get('comment')
 
     if mark_type == 'monthly':
-        mark = MonthlyTest.query.get_or_404(mark_id)
+        mark = scoped_get_or_404(MonthlyTest, mark_id)
         if mark.subject_id != current_user.subject_id:
             flash('Access denied.', 'danger')
             return redirect(url_for('teacher_marks'))
@@ -727,7 +852,7 @@ def teacher_edit_mark(mark_id):
         mark.total_marks = total_marks
         mark.comment = comment or None
     elif mark_type == 'exam':
-        mark = ExamMark.query.get_or_404(mark_id)
+        mark = scoped_get_or_404(ExamMark, mark_id)
         if mark.subject_id != current_user.subject_id:
             flash('Access denied.', 'danger')
             return redirect(url_for('teacher_marks'))
@@ -745,13 +870,13 @@ def teacher_edit_mark(mark_id):
 @role_required('teacher')
 def teacher_delete_mark(mark_id, mark_type):
     if mark_type == 'monthly':
-        mark = MonthlyTest.query.get_or_404(mark_id)
+        mark = scoped_get_or_404(MonthlyTest, mark_id)
         if mark.teacher_id != current_user.id:
             flash('Access denied.', 'danger')
             return redirect(url_for('teacher_marks'))
         db.session.delete(mark)
     elif mark_type == 'exam':
-        mark = ExamMark.query.get_or_404(mark_id)
+        mark = scoped_get_or_404(ExamMark, mark_id)
         if mark.teacher_id != current_user.id:
             flash('Access denied.', 'danger')
             return redirect(url_for('teacher_marks'))
@@ -768,12 +893,12 @@ def teacher_delete_mark(mark_id, mark_type):
 def teacher_save_remark():
     student_id = request.form.get('student_id')
     remark = request.form.get('remark')
-    student = Student.query.get(student_id)
+    student = scoped(Student).filter_by(id=student_id).first()
     if not student:
         flash('Student not found.', 'danger')
         return redirect(url_for('teacher_class'))
 
-    tr = TeacherRemark(student_id=student.id, teacher_id=current_user.id, remark=remark)
+    tr = TeacherRemark(student_id=student.id, teacher_id=current_user.id, remark=remark, campus_id=current_user.campus_id)
     db.session.add(tr)
     db.session.commit()
     flash(f'Remark added for {student.full_name}.', 'success')
@@ -786,9 +911,9 @@ def teacher_save_remark():
 @login_required
 @role_required('cashier')
 def cashier_dashboard():
-    recent_payments = Payment.query.order_by(Payment.created_at.desc()).options(joinedload(Payment.student), joinedload(Payment.cashier)).limit(20).all()
-    pending = Payment.query.filter_by(cleared=False).count()
-    all_students = Student.query.order_by(Student.student_id).all()
+    recent_payments = scoped(Payment).order_by(Payment.created_at.desc()).options(joinedload(Payment.student), joinedload(Payment.cashier)).limit(20).all()
+    pending = scoped(Payment).filter_by(cleared=False).count()
+    all_students = scoped(Student).order_by(Student.student_id).all()
     return render_template('staff/cashier/dashboard.html', payments=recent_payments, pending=pending, all_students=all_students)
 
 
@@ -803,12 +928,12 @@ def cashier_student_fees():
 
     if request.method == 'POST':
         student_id = request.form.get('student_id')
-        student = Student.query.filter_by(student_id=student_id).first()
+        student = scoped(Student).filter_by(student_id=student_id).first()
         if not student:
             flash('Student not found.', 'danger')
         else:
-            fee_account = FeeAccount.query.filter_by(student_id=student.id).first()
-            payments = Payment.query.filter_by(student_id=student.id).order_by(Payment.created_at.desc()).all()
+            fee_account = FeeAccount.query.filter_by(student_id=student.id, campus_id=current_user.campus_id).first()
+            payments = Payment.query.filter_by(student_id=student.id, campus_id=current_user.campus_id).order_by(Payment.created_at.desc()).all()
             detected_fee = get_detected_fee(student)
 
     return render_template('staff/cashier/student_fees.html', student=student, fee_account=fee_account,
@@ -824,7 +949,7 @@ def cashier_add_payment():
     payment_method = request.form.get('payment_method')
     reference = request.form.get('reference')
 
-    student = Student.query.get(student_id)
+    student = scoped(Student).filter_by(id=student_id).first()
     if not student:
         flash('Student not found.', 'danger')
         return redirect(url_for('cashier_dashboard'))
@@ -833,11 +958,12 @@ def cashier_add_payment():
         student_id=student.id, receipt_number=generate_receipt(),
         amount=amount, payment_date=datetime.now(),
         payment_method=payment_method, reference=reference,
-        cashier_id=current_user.id, cleared=False
+        cashier_id=current_user.id, cleared=False,
+        campus_id=current_user.campus_id
     )
     db.session.add(payment)
 
-    fee_account = FeeAccount.query.filter_by(student_id=student.id).first()
+    fee_account = FeeAccount.query.filter_by(student_id=student.id, campus_id=current_user.campus_id).first()
     if fee_account:
         fee_account.amount_paid += amount
         fee_account.balance = fee_account.total_fees - fee_account.amount_paid
@@ -854,7 +980,7 @@ def cashier_add_payment():
 @login_required
 @role_required('cashier')
 def cashier_clear_payment(payment_id):
-    payment = Payment.query.get_or_404(payment_id)
+    payment = scoped_get_or_404(Payment, payment_id)
     payment.cleared = True
     payment.cleared_at = datetime.now()
     db.session.commit()
@@ -870,18 +996,18 @@ def cashier_setup_fees():
     term = request.form.get('term')
     total_fees = float(request.form.get('total_fees'))
 
-    student = Student.query.get(student_id)
+    student = scoped(Student).filter_by(id=student_id).first()
     if not student:
         flash('Student not found.', 'danger')
         return redirect(url_for('cashier_dashboard'))
 
-    existing = FeeAccount.query.filter_by(student_id=student.id, term=term).first()
+    existing = FeeAccount.query.filter_by(student_id=student.id, term=term, campus_id=current_user.campus_id).first()
     if existing:
         existing.total_fees = total_fees
         existing.balance = total_fees - existing.amount_paid
     else:
         fee_account = FeeAccount(
-            student_id=student.id, term=term,
+            student_id=student.id, term=term, campus_id=current_user.campus_id,
             total_fees=total_fees, amount_paid=0.0, balance=total_fees
         )
         db.session.add(fee_account)
@@ -897,7 +1023,7 @@ def cashier_setup_fees():
 @login_required
 @role_required('admin')
 def admin_dashboard():
-    students = Student.query.order_by(Student.created_at.desc()).all()
+    students = scoped(Student).order_by(Student.created_at.desc()).all()
     active_students = [s for s in students if s.is_active]
     inactive_students = [s for s in students if not s.is_active]
     return render_template('staff/admin/dashboard.html', students=students, active_students=active_students,
@@ -908,7 +1034,7 @@ def admin_dashboard():
 @login_required
 @role_required('admin')
 def admin_add_student():
-    subjects = Subject.query.all()
+    subjects = scoped(Subject).all()
     o_level = [s for s in subjects if s.level == 'O']
     a_level = [s for s in subjects if s.level == 'A']
     if request.method == 'POST':
@@ -923,10 +1049,12 @@ def admin_add_student():
 
         student_id = generate_student_id()
         reg_number = f'REG{student_id}'
+        target_campus_id = get_selected_campus_id()
 
         student = Student(
             student_id=student_id, first_name=first_name, last_name=last_name,
-            form=form, curriculum=curriculum, email=email or None, phone=phone, reg_number=reg_number
+            form=form, curriculum=curriculum, email=email or None, phone=phone, reg_number=reg_number,
+            campus_id=target_campus_id
         )
         student.set_password(password or 'student123')
 
@@ -937,9 +1065,9 @@ def admin_add_student():
             ss = StudentSubject(student_id=student.id, subject_id=int(sid))
             db.session.add(ss)
 
-        term_fee = get_term_fee(form)
+        term_fee = get_term_fee(form, campus_id=target_campus_id)
         if term_fee > 0:
-            db.session.add(FeeAccount(student_id=student.id, term=get_current_term(),
+            db.session.add(FeeAccount(student_id=student.id, term=get_current_term(), campus_id=target_campus_id,
                                       total_fees=term_fee, amount_paid=0.0, balance=term_fee))
 
         db.session.commit()
@@ -947,16 +1075,17 @@ def admin_add_student():
         flash(f'Student {first_name} {last_name} added. ID: {student_id}, Reg: {reg_number}', 'success')
         return redirect(url_for('admin_dashboard'))
 
-    return render_template('staff/admin/add_student.html', subjects=subjects, o_level=o_level, a_level=a_level)
+    campuses = Campus.query.order_by(Campus.name).all() if getattr(g, 'is_super_admin', False) else []
+    return render_template('staff/admin/add_student.html', subjects=subjects, o_level=o_level, a_level=a_level, campuses=campuses)
 
 
 @app.route('/staff/admin/student/edit/<int:student_id>', methods=['GET', 'POST'])
 @login_required
 @role_required('admin')
 def admin_edit_student(student_id):
-    student = Student.query.get_or_404(student_id)
+    student = scoped_get_or_404(Student, student_id)
     original_form = student.form
-    subjects = Subject.query.all()
+    subjects = scoped(Subject).all()
     enrolled_ids = [ss.subject_id for ss in student.subjects]
     o_level = [s for s in subjects if s.level == 'O']
     a_level = [s for s in subjects if s.level == 'A']
@@ -979,7 +1108,7 @@ def admin_edit_student(student_id):
         if student.form != original_form:
             fee_account = FeeAccount.query.filter_by(student_id=student.id, term=get_current_term()).first()
             if fee_account:
-                new_fee = get_term_fee(student.form)
+                new_fee = get_term_fee(student.form, campus_id=student.campus_id)
                 if new_fee > 0:
                     fee_account.total_fees = new_fee
                     fee_account.balance = new_fee - fee_account.amount_paid
@@ -995,7 +1124,7 @@ def admin_edit_student(student_id):
 @login_required
 @role_required('admin')
 def admin_deactivate_student(student_id):
-    student = Student.query.get_or_404(student_id)
+    student = scoped_get_or_404(Student, student_id)
     student.is_active = not student.is_active
     status = 'reactivated' if student.is_active else 'deactivated (transferred)'
     db.session.commit()
@@ -1007,7 +1136,7 @@ def admin_deactivate_student(student_id):
 @login_required
 @role_required('admin')
 def admin_remove_student_subjects(student_id):
-    student = Student.query.get_or_404(student_id)
+    student = scoped_get_or_404(Student, student_id)
     count = StudentSubject.query.filter_by(student_id=student.id).count()
     StudentSubject.query.filter_by(student_id=student.id).delete()
     db.session.commit()
@@ -1033,7 +1162,7 @@ def admin_add_activity():
 @login_required
 @role_required('admin')
 def admin_activities():
-    activities_list = Activity.query.order_by(Activity.created_at.desc()).all()
+    activities_list = scoped(Activity).order_by(Activity.created_at.desc()).all()
     return render_template('staff/admin/activities.html', activities_list=activities_list)
 
 
@@ -1047,7 +1176,8 @@ def admin_add_new_activity():
         visibility = request.form.get('visibility', 'all')
         if title:
             activity = Activity(title=title, description=description,
-                                visibility=visibility, created_by=current_user.id)
+                                visibility=visibility, created_by=current_user.id,
+                                campus_id=current_user.campus_id)
             db.session.add(activity)
             db.session.commit()
             flash('Activity created.', 'success')
@@ -1060,7 +1190,7 @@ def admin_add_new_activity():
 @login_required
 @role_required('admin')
 def admin_edit_activity(id):
-    activity = Activity.query.get_or_404(id)
+    activity = scoped_get_or_404(Activity, id)
     if request.method == 'POST':
         title = request.form.get('title')
         description = request.form.get('description')
@@ -1080,7 +1210,7 @@ def admin_edit_activity(id):
 @login_required
 @role_required('admin')
 def admin_delete_activity(id):
-    activity = Activity.query.get_or_404(id)
+    activity = scoped_get_or_404(Activity, id)
     db.session.delete(activity)
     db.session.commit()
     flash('Activity deleted.', 'success')
@@ -1093,7 +1223,7 @@ def admin_delete_activity(id):
 @login_required
 @role_required('principal')
 def principal_dashboard():
-    students = Student.query.order_by(Student.student_id).all()
+    students = scoped(Student).order_by(Student.student_id).all()
     return render_template('staff/principal/dashboard.html', students=students)
 
 
@@ -1101,11 +1231,11 @@ def principal_dashboard():
 @login_required
 @role_required('principal')
 def principal_student_results(student_id):
-    student = Student.query.get_or_404(student_id)
+    student = scoped_get_or_404(Student, student_id)
     subjects = [ss.subject for ss in student.subjects if ss.subject]
-    monthly_tests = MonthlyTest.query.filter_by(student_id=student.id).order_by(MonthlyTest.academic_year.desc(), MonthlyTest.term).all()
-    exam_marks_list = ExamMark.query.filter_by(student_id=student.id).order_by(ExamMark.academic_year.desc(), ExamMark.term).all()
-    principal_comments = PrincipalComment.query.filter_by(student_id=student.id).all()
+    monthly_tests = MonthlyTest.query.filter_by(student_id=student.id, campus_id=current_user.campus_id).order_by(MonthlyTest.academic_year.desc(), MonthlyTest.term).all()
+    exam_marks_list = ExamMark.query.filter_by(student_id=student.id, campus_id=current_user.campus_id).order_by(ExamMark.academic_year.desc(), ExamMark.term).all()
+    principal_comments = PrincipalComment.query.filter_by(student_id=student.id, campus_id=current_user.campus_id).all()
     pc_by_key = {}
     for pc in principal_comments:
         pc_by_key[(pc.subject_id, pc.term, pc.academic_year)] = pc
@@ -1125,14 +1255,16 @@ def principal_save_comment():
 
     existing = PrincipalComment.query.filter_by(
         student_id=student_id, subject_id=subject_id,
-        term=term, academic_year=academic_year
+        term=term, academic_year=academic_year,
+        campus_id=current_user.campus_id
     ).first()
     if existing:
         existing.comment = comment
     else:
         pc = PrincipalComment(
             student_id=student_id, subject_id=subject_id,
-            term=term, academic_year=academic_year, comment=comment
+            term=term, academic_year=academic_year, comment=comment,
+            campus_id=current_user.campus_id
         )
         db.session.add(pc)
     db.session.commit()
@@ -1144,7 +1276,7 @@ def principal_save_comment():
 @login_required
 @role_required('principal')
 def principal_add_staff():
-    subjects = Subject.query.all()
+    subjects = scoped(Subject).all()
     if request.method == 'POST':
         username = request.form.get('username')
         email = request.form.get('email')
@@ -1164,11 +1296,13 @@ def principal_add_staff():
             return redirect(url_for('principal_add_staff'))
 
         reg_number = f'STF{username.upper()}'
+        target_campus_id = get_selected_campus_id()
 
         user = User(
             username=username, email=email, role=role, full_name=full_name,
             phone=phone, reg_number=reg_number,
-            subject_id=int(subject_id) if subject_id and role == 'teacher' else None
+            subject_id=int(subject_id) if subject_id and role == 'teacher' else None,
+            campus_id=target_campus_id
         )
         user.set_password(password)
         db.session.add(user)
@@ -1176,15 +1310,16 @@ def principal_add_staff():
         flash(f'Staff {full_name} added as {role}. Reg: {reg_number}', 'success')
         return redirect(url_for('principal_dashboard'))
 
-    return render_template('staff/principal/add_staff.html', subjects=subjects)
+    campuses = Campus.query.order_by(Campus.name).all() if getattr(g, 'is_super_admin', False) else []
+    return render_template('staff/principal/add_staff.html', subjects=subjects, campuses=campuses)
 
 
 @app.route('/staff/principal/staff/edit/<int:staff_id>', methods=['GET', 'POST'])
 @login_required
 @role_required('principal')
 def principal_edit_staff(staff_id):
-    staff_member = User.query.get_or_404(staff_id)
-    subjects = Subject.query.all()
+    staff_member = scoped_get_or_404(User, staff_id)
+    subjects = scoped(Subject).all()
 
     if request.method == 'POST':
         staff_member.full_name = request.form.get('full_name')
@@ -1205,7 +1340,7 @@ def principal_edit_staff(staff_id):
 @login_required
 @role_required('principal')
 def principal_fire_staff(staff_id):
-    staff_member = User.query.get_or_404(staff_id)
+    staff_member = scoped_get_or_404(User, staff_id)
     if staff_member.role == 'principal':
         flash('Cannot fire the principal.', 'danger')
         return redirect(url_for('principal_dashboard'))
@@ -1220,7 +1355,7 @@ def principal_fire_staff(staff_id):
 @login_required
 @role_required('principal')
 def principal_toggle_student_status(student_id):
-    student = Student.query.get_or_404(student_id)
+    student = scoped_get_or_404(Student, student_id)
     student.is_active = not student.is_active
     status = 'reactivated' if student.is_active else 'deactivated'
     db.session.commit()
@@ -1232,10 +1367,10 @@ def principal_toggle_student_status(student_id):
 @login_required
 @role_required('principal')
 def principal_timetables():
-    subjects = Subject.query.all()
-    teachers = User.query.filter_by(role='teacher').all()
-    timetables = Timetable.query.order_by(Timetable.form, Timetable.day_of_week, Timetable.start_time).all()
-    exam_timetables = ExamTimetable.query.order_by(ExamTimetable.exam_date, ExamTimetable.start_time).all()
+    subjects = scoped(Subject).all()
+    teachers = scoped(User).filter_by(role='teacher').all()
+    timetables = scoped(Timetable).order_by(Timetable.form, Timetable.day_of_week, Timetable.start_time).all()
+    exam_timetables = scoped(ExamTimetable).order_by(ExamTimetable.exam_date, ExamTimetable.start_time).all()
     return render_template('staff/principal/timetables.html', subjects=subjects, teachers=teachers, timetables=timetables, exam_timetables=exam_timetables)
 
 
@@ -1247,7 +1382,7 @@ def principal_add_timetable():
         form=request.form.get('form'), day_of_week=request.form.get('day_of_week'),
         subject_id=int(request.form.get('subject_id')), start_time=request.form.get('start_time'),
         end_time=request.form.get('end_time'), teacher_id=int(request.form.get('teacher_id')),
-        room=request.form.get('room')
+        room=request.form.get('room'), campus_id=current_user.campus_id
     )
     db.session.add(tt)
     db.session.commit()
@@ -1263,7 +1398,7 @@ def principal_add_exam_timetable():
         form=request.form.get('form'), subject_id=int(request.form.get('subject_id')),
         exam_date=datetime.strptime(request.form.get('exam_date'), '%Y-%m-%d').date(),
         start_time=request.form.get('start_time'), end_time=request.form.get('end_time'),
-        room=request.form.get('room')
+        room=request.form.get('room'), campus_id=current_user.campus_id
     )
     db.session.add(ett)
     db.session.commit()
@@ -1275,7 +1410,7 @@ def principal_add_exam_timetable():
 @login_required
 @role_required('principal')
 def principal_delete_timetable(tt_id):
-    db.session.delete(Timetable.query.get_or_404(tt_id))
+    db.session.delete(scoped_get_or_404(Timetable, tt_id))
     db.session.commit()
     flash('Timetable entry deleted.', 'success')
     return redirect(url_for('principal_timetables'))
@@ -1285,7 +1420,7 @@ def principal_delete_timetable(tt_id):
 @login_required
 @role_required('principal')
 def principal_delete_exam_timetable(ett_id):
-    db.session.delete(ExamTimetable.query.get_or_404(ett_id))
+    db.session.delete(scoped_get_or_404(ExamTimetable, ett_id))
     db.session.commit()
     flash('Exam timetable entry deleted.', 'success')
     return redirect(url_for('principal_timetables'))
@@ -1299,16 +1434,16 @@ def principal_fee_settings():
         form = request.form.get('form', '').strip()
         term_fee = float(request.form.get('term_fee', 0))
         if form and term_fee > 0:
-            existing = FeeSetting.query.filter_by(form=form).first()
+            existing = FeeSetting.query.filter_by(form=form, campus_id=current_user.campus_id).first()
             if existing:
                 existing.term_fee = term_fee
             else:
-                db.session.add(FeeSetting(form=form, term_fee=term_fee))
+                db.session.add(FeeSetting(form=form, term_fee=term_fee, campus_id=current_user.campus_id))
             db.session.commit()
             flash(f'Fee for {form} set to ${term_fee:.2f}.', 'success')
         return redirect(url_for('principal_fee_settings'))
 
-    fee_settings = FeeSetting.query.order_by(FeeSetting.form).all()
+    fee_settings = scoped(FeeSetting).order_by(FeeSetting.form).all()
     forms = ['Form 1', 'Form 2', 'Form 3', 'Form 4', 'Form 5', 'Form 6']
     return render_template('staff/principal/fee_settings.html', fee_settings=fee_settings, forms=forms)
 
@@ -1317,7 +1452,7 @@ def principal_fee_settings():
 @login_required
 @role_required('principal')
 def principal_delete_fee_setting(fs_id):
-    fs = FeeSetting.query.get_or_404(fs_id)
+    fs = scoped_get_or_404(FeeSetting, fs_id)
     db.session.delete(fs)
     db.session.commit()
     flash('Fee setting removed.', 'success')
@@ -1328,15 +1463,15 @@ def principal_delete_fee_setting(fs_id):
 @login_required
 @role_required('principal')
 def principal_edit_student_fees(student_id):
-    student = Student.query.get_or_404(student_id)
-    fee_account = FeeAccount.query.filter_by(student_id=student.id).first()
-    default_fee = fee_account.total_fees if fee_account else get_term_fee(student.form)
+    student = scoped_get_or_404(Student, student_id)
+    fee_account = FeeAccount.query.filter_by(student_id=student.id, campus_id=current_user.campus_id).first()
+    default_fee = fee_account.total_fees if fee_account else get_term_fee(student.form, campus_id=current_user.campus_id)
 
     if request.method == 'POST':
         total_fees = float(request.form.get('total_fees', 0))
         amount_paid = float(request.form.get('amount_paid', 0))
         if not fee_account:
-            fee_account = FeeAccount(student_id=student.id, term=get_current_term())
+            fee_account = FeeAccount(student_id=student.id, term=get_current_term(), campus_id=current_user.campus_id)
             db.session.add(fee_account)
         fee_account.total_fees = total_fees
         fee_account.amount_paid = amount_paid
@@ -1354,7 +1489,7 @@ def principal_edit_student_fees(student_id):
 @login_required
 @role_required('principal')
 def export_zimsec_candidates():
-    students = Student.query.filter_by(curriculum='ZIMSEC', is_active=True).order_by(Student.form, Student.last_name).all()
+    students = scoped(Student).filter_by(curriculum='ZIMSEC', is_active=True).order_by(Student.form, Student.last_name).all()
     import csv, io
     output = io.StringIO()
     writer = csv.writer(output)
@@ -1378,16 +1513,16 @@ def export_ministry_report():
     writer = csv.writer(output)
     writer.writerow(['Form', 'Total Students', 'Total Passed', 'Pass Rate', 'Total Expected Fees', 'Total Collected', 'Outstanding'])
     forms = ['Form 1', 'Form 2', 'Form 3', 'Form 4', 'Form 5', 'Form 6']
-    all_students = Student.query.all()
+    all_students = scoped(Student).all()
     student_form = {s.id: s.form for s in all_students}
-    all_exams = ExamMark.query.filter_by(term=term).all()
+    all_exams = ExamMark.query.filter_by(term=term, campus_id=current_user.campus_id).all()
     by_form = {}
     for e in all_exams:
         f = student_form.get(e.student_id)
         if f:
             by_form.setdefault(f, []).append(e)
-    fee_total = db.session.query(db.func.sum(FeeAccount.total_fees)).filter(FeeAccount.term == term).scalar() or 0
-    fee_collected = db.session.query(db.func.sum(Payment.amount)).filter(Payment.cleared == True).scalar() or 0
+    fee_total = db.session.query(db.func.sum(FeeAccount.total_fees)).filter(FeeAccount.term == term, FeeAccount.campus_id == current_user.campus_id).scalar() or 0
+    fee_collected = db.session.query(db.func.sum(Payment.amount)).filter(Payment.cleared == True, Payment.campus_id == current_user.campus_id).scalar() or 0
     outstanding_fees = fee_total - fee_collected
     for f in forms:
         total = sum(1 for s in all_students if s.form == f)
@@ -1425,8 +1560,8 @@ def student_dashboard():
 
     fee_account = FeeAccount.query.filter_by(student_id=current_user.id).first()
     payments = Payment.query.filter_by(student_id=current_user.id).order_by(Payment.created_at.desc()).limit(10).all()
-    timetables = Timetable.query.filter_by(form=current_user.form).order_by(Timetable.day_of_week, Timetable.start_time).all()
-    exam_timetables = ExamTimetable.query.filter_by(form=current_user.form).order_by(ExamTimetable.exam_date).all()
+    timetables = Timetable.query.filter_by(form=current_user.form, campus_id=current_user.campus_id).order_by(Timetable.day_of_week, Timetable.start_time).all()
+    exam_timetables = ExamTimetable.query.filter_by(form=current_user.form, campus_id=current_user.campus_id).order_by(ExamTimetable.exam_date).all()
 
     # Get teacher for each subject
     subject_teachers = {}
@@ -1436,7 +1571,7 @@ def student_dashboard():
 
     # Get teacher remarks for this student
     teacher_remarks = TeacherRemark.query.filter_by(student_id=current_user.id).order_by(TeacherRemark.created_at.desc()).all()
-    recent_activity_posts = Activity.query.filter_by(visibility='all').order_by(Activity.created_at.desc()).limit(10).all()
+    recent_activity_posts = scoped(Activity).filter_by(visibility='all').order_by(Activity.created_at.desc()).limit(10).all()
 
     return render_template('student/dashboard.html', subjects=subjects, monthly_tests=monthly_tests,
                          exam_marks=exam_marks_list, fee_account=fee_account, payments=payments,
@@ -1523,8 +1658,8 @@ def student_finances():
 @login_required
 @student_required
 def student_timetables():
-    timetables = Timetable.query.filter_by(form=current_user.form).order_by(Timetable.day_of_week, Timetable.start_time).all()
-    exam_timetables_list = ExamTimetable.query.filter_by(form=current_user.form).order_by(ExamTimetable.exam_date).all()
+    timetables = Timetable.query.filter_by(form=current_user.form, campus_id=current_user.campus_id).order_by(Timetable.day_of_week, Timetable.start_time).all()
+    exam_timetables_list = ExamTimetable.query.filter_by(form=current_user.form, campus_id=current_user.campus_id).order_by(ExamTimetable.exam_date).all()
 
     timetable_by_day = {}
     for day in ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']:
@@ -1545,6 +1680,103 @@ def student_subjects():
     return render_template('student/subjects.html', subjects=subjects, subject_teachers=subject_teachers)
 
 
+# ============ SUPER ADMIN ROUTES ============
+
+@app.route('/super-admin/dashboard')
+@login_required
+@super_admin_required
+def super_admin_dashboard():
+    campuses = Campus.query.order_by(Campus.name).all()
+    total_campuses = len(campuses)
+    total_students = Student.query.count()
+    total_staff = User.query.filter(User.role != 'super_admin').count()
+    total_payments = db.session.query(db.func.sum(Payment.amount)).filter(Payment.cleared == True).scalar() or 0
+    return render_template('super_admin/dashboard.html', campuses=campuses, total_campuses=total_campuses,
+                           total_students=total_students, total_staff=total_staff, total_payments=total_payments)
+
+
+@app.route('/super-admin/campuses')
+@login_required
+@super_admin_required
+def super_admin_campuses():
+    campuses = Campus.query.order_by(Campus.name).all()
+    return render_template('super_admin/campuses.html', campuses=campuses)
+
+
+@app.route('/super-admin/campuses/add', methods=['POST'])
+@login_required
+@super_admin_required
+def super_admin_add_campus():
+    name = request.form.get('name', '').strip()
+    code = request.form.get('code', '').strip().upper()
+    address = request.form.get('address', '').strip()
+    if not name or not code:
+        flash('Campus name and code are required.', 'danger')
+        return redirect(url_for('super_admin_campuses'))
+    if Campus.query.filter_by(code=code).first():
+        flash(f'Campus code {code} already exists.', 'danger')
+        return redirect(url_for('super_admin_campuses'))
+    db.session.add(Campus(name=name, code=code, address=address))
+    db.session.commit()
+    log_activity('Campus created', f'{name} ({code})', user=current_user)
+    flash(f'Campus {name} ({code}) created.', 'success')
+    return redirect(url_for('super_admin_campuses'))
+
+
+@app.route('/super-admin/campuses/<int:campus_id>/staff', methods=['GET', 'POST'])
+@login_required
+@super_admin_required
+def super_admin_campus_staff(campus_id):
+    campus = Campus.query.get_or_404(campus_id)
+    if request.method == 'POST':
+        username = request.form.get('username')
+        email = request.form.get('email')
+        password = request.form.get('password')
+        role = request.form.get('role')
+        full_name = request.form.get('full_name')
+        phone = request.form.get('phone')
+        if not username or not full_name:
+            flash('Username and full name are required.', 'danger')
+            return redirect(url_for('super_admin_campus_staff', campus_id=campus.id))
+        if User.query.filter_by(username=username).first():
+            flash('Username already exists.', 'danger')
+            return redirect(url_for('super_admin_campus_staff', campus_id=campus.id))
+        errors = password_strength_errors(password)
+        if errors:
+            flash(errors[0], 'danger')
+            return redirect(url_for('super_admin_campus_staff', campus_id=campus.id))
+        user = User(username=username, email=email or None, role=role, full_name=full_name,
+                    phone=phone or None, reg_number=f'STF{username.upper()}', campus_id=campus.id)
+        user.set_password(password)
+        db.session.add(user)
+        db.session.commit()
+        log_activity('Staff assigned to campus', f'{full_name} ({role}) -> {campus.name}', user=current_user)
+        flash(f'{full_name} added as {role} at {campus.name}.', 'success')
+        return redirect(url_for('super_admin_campus_staff', campus_id=campus.id))
+
+    staff = User.query.filter(User.campus_id == campus.id, User.role != 'super_admin').order_by(User.full_name).all()
+    return render_template('super_admin/campus_staff.html', campus=campus, staff=staff)
+
+
+@app.route('/super-admin/campuses/<int:campus_id>/staff/fire/<int:staff_id>', methods=['POST'])
+@login_required
+@super_admin_required
+def super_admin_fire_staff(campus_id, staff_id):
+    staff_member = User.query.get_or_404(staff_id)
+    if staff_member.campus_id != campus_id:
+        flash('Staff member not in this campus.', 'danger')
+        return redirect(url_for('super_admin_campus_staff', campus_id=campus_id))
+    if staff_member.role == 'super_admin':
+        flash('Cannot remove a super admin.', 'danger')
+        return redirect(url_for('super_admin_campus_staff', campus_id=campus_id))
+    full_name = staff_member.full_name
+    db.session.delete(staff_member)
+    db.session.commit()
+    log_activity('Staff removed from campus', f'{full_name} removed from campus #{campus_id}', user=current_user)
+    flash(f'{full_name} removed.', 'warning')
+    return redirect(url_for('super_admin_campus_staff', campus_id=campus_id))
+
+
 # ============ SEED DATA ============
 
 @app.route('/setup')
@@ -1553,6 +1785,11 @@ def setup():
         return 'Setup is disabled.', 403
     db.drop_all()
     db.create_all()
+
+    main_campus = Campus(name='Main Campus', code='MAIN', address='123 School Road, Harare')
+    db.session.add(main_campus)
+    db.session.commit()
+    cid = main_campus.id
 
     ol = [
         ('Mathematics', 'MATH', 'O'), ('English Language', 'ENG', 'O'), ('Shona', 'SHO', 'O'),
@@ -1579,28 +1816,37 @@ def setup():
     ]
 
     for name, code, level in ol + al:
-        db.session.add(Subject(name=name, code=code, level=level))
+        db.session.add(Subject(name=name, code=code, level=level, campus_id=cid))
     db.session.commit()
 
     default_fees = [('Form 1', 350), ('Form 2', 350), ('Form 3', 400), ('Form 4', 500), ('Form 5', 450), ('Form 6', 600)]
     for form, fee in default_fees:
-        db.session.add(FeeSetting(form=form, term_fee=fee))
+        db.session.add(FeeSetting(form=form, term_fee=fee, campus_id=cid))
     db.session.commit()
 
     principal = User(username='principal', email='principal@schoolbridge.zw', role='principal',
-                     full_name='Dr. T. Chigumba', reg_number='REG-PRINCIPAL', phone='+263 712 345 678')
+                     full_name='Dr. T. Chigumba', reg_number='REG-PRINCIPAL', phone='+263 712 345 678',
+                     campus_id=cid)
     principal.set_password('principal123')
     db.session.add(principal)
 
     admin = User(username='admin', email='admin@schoolbridge.zw', role='admin',
-                 full_name='Mr. K. Moyo', reg_number='REG-ADMIN', phone='+263 712 345 679')
+                 full_name='Mr. K. Moyo', reg_number='REG-ADMIN', phone='+263 712 345 679',
+                 campus_id=cid)
     admin.set_password('admin123')
     db.session.add(admin)
 
     cashier = User(username='cashier', email='cashier@schoolbridge.zw', role='cashier',
-                   full_name='Mrs. S. Dube', reg_number='REG-CASHIER', phone='+263 712 345 680')
+                   full_name='Mrs. S. Dube', reg_number='REG-CASHIER', phone='+263 712 345 680',
+                   campus_id=cid)
     cashier.set_password('cashier123')
     db.session.add(cashier)
+
+    super_admin = User(username='superadmin', email='superadmin@schoolbridge.zw', role='super_admin',
+                       full_name='System Administrator', reg_number='REG-SUPERADMIN', phone='+263 712 345 687',
+                       campus_id=cid)
+    super_admin.set_password('superadmin123')
+    db.session.add(super_admin)
 
     math_s = Subject.query.filter_by(code='MATH').first()
     eng_s = Subject.query.filter_by(code='ENG').first()
@@ -1619,7 +1865,8 @@ def setup():
     ]
     for uname, email, name, subj_id, phone in teachers_data:
         t = User(username=uname, email=email, role='teacher', full_name=name,
-                 subject_id=subj_id, phone=phone, reg_number=f'REG-{uname.upper()}')
+                 subject_id=subj_id, phone=phone, reg_number=f'REG-{uname.upper()}',
+                 campus_id=cid)
         t.set_password('teacher123')
         db.session.add(t)
     db.session.commit()
@@ -1640,7 +1887,7 @@ def setup():
         student = Student(student_id=sid, first_name=fn, last_name=ln, form=form,
                          curriculum=curriculum,
                          email=f'{fn.lower()}.{ln.lower()}@student.schoolbridge.zw',
-                         reg_number=reg, phone=phone)
+                         reg_number=reg, phone=phone, campus_id=cid)
         student.set_password('student123')
         db.session.add(student)
         db.session.flush()
@@ -1648,7 +1895,7 @@ def setup():
             db.session.add(StudentSubject(student_id=student.id, subject_id=subj.id))
 
         balance = 0.0 if sid == '2026005' else 200.0
-        fee = FeeAccount(student_id=student.id, term='Term 1', total_fees=500.00, amount_paid=500.00 - balance, balance=balance)
+        fee = FeeAccount(student_id=student.id, campus_id=cid, term='Term 1', total_fees=500.00, amount_paid=500.00 - balance, balance=balance)
         db.session.add(fee)
 
     db.session.commit()
@@ -1659,8 +1906,10 @@ def setup():
     if s1 and t1:
         for month, mks in [('January', 68), ('February', 72), ('March', 65)]:
             db.session.add(MonthlyTest(student_id=s1.id, subject_id=math_s.id, term='Term 1',
+                                       campus_id=cid,
                                        month=month, marks=mks, total_marks=100, teacher_id=t1.id))
         db.session.add(ExamMark(student_id=s1.id, subject_id=math_s.id, term='Term 1',
+                                campus_id=cid,
                                 exam_type='Mid-Term', marks=71, total_marks=100, teacher_id=t1.id))
 
     db.session.commit()
@@ -1668,6 +1917,8 @@ def setup():
 
 
 def _migrate_a_level_math_subjects():
+    campus = Campus.query.filter_by(code='MAIN').first()
+    cid = campus.id if campus else None
     a_math = Subject.query.filter_by(code='MATH-A').first()
     if not a_math:
         a_math = Subject.query.filter_by(level='A', name='Mathematics').first()
@@ -1677,7 +1928,7 @@ def _migrate_a_level_math_subjects():
     existing = {s.name for s in Subject.query.filter_by(level='A').all()}
     for name, code in (('Statistics', 'MATH-STAT'), ('Mechanics', 'MATH-MECH'), ('Further Mathematics', 'MATH-FURTHER')):
         if name not in existing:
-            db.session.add(Subject(name=name, code=code, level='A'))
+            db.session.add(Subject(name=name, code=code, level='A', campus_id=cid))
     db.session.commit()
 
 

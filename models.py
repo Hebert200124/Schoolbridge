@@ -25,10 +25,33 @@ def zim_grade(marks, total_marks, level='O'):
         return 'U'
 
 
+class Campus(db.Model):
+    __tablename__ = 'campuses'
+
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(120), nullable=False)
+    code = db.Column(db.String(20), unique=True, nullable=False, index=True)
+    address = db.Column(db.String(255))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    staff = db.relationship('User', backref='campus', lazy=True, foreign_keys='User.campus_id')
+    students = db.relationship('Student', backref='campus', lazy=True)
+    subjects = db.relationship('Subject', backref='campus', lazy=True)
+
+    @property
+    def student_count(self):
+        return len(self.students)
+
+    @property
+    def staff_count(self):
+        return len(self.staff)
+
+
 class User(UserMixin, db.Model):
     __tablename__ = 'users'
 
     id = db.Column(db.Integer, primary_key=True)
+    campus_id = db.Column(db.Integer, db.ForeignKey('campuses.id'), nullable=False, index=True)
     username = db.Column(db.String(80), unique=True, nullable=False, index=True)
     email = db.Column(db.String(120), unique=True, nullable=False, index=True)
     password_hash = db.Column(db.String(256), nullable=False)
@@ -52,10 +75,14 @@ class User(UserMixin, db.Model):
 
 class Subject(db.Model):
     __tablename__ = 'subjects'
+    __table_args__ = (
+        db.UniqueConstraint('campus_id', 'code', name='uq_subjects_campus_code'),
+    )
 
     id = db.Column(db.Integer, primary_key=True)
+    campus_id = db.Column(db.Integer, db.ForeignKey('campuses.id'), nullable=False, index=True)
     name = db.Column(db.String(100), nullable=False)
-    code = db.Column(db.String(20), unique=True, nullable=False)
+    code = db.Column(db.String(20), nullable=False)
     level = db.Column(db.String(5), default='O')
 
     students = db.relationship('StudentSubject', backref='subject', lazy=True)
@@ -67,6 +94,7 @@ class Student(UserMixin, db.Model):
     __tablename__ = 'students'
 
     id = db.Column(db.Integer, primary_key=True)
+    campus_id = db.Column(db.Integer, db.ForeignKey('campuses.id'), nullable=False, index=True)
     student_id = db.Column(db.String(20), unique=True, nullable=False, index=True)
     first_name = db.Column(db.String(100), nullable=False)
     last_name = db.Column(db.String(100), nullable=False)
@@ -117,6 +145,7 @@ class MonthlyTest(db.Model):
     )
 
     id = db.Column(db.Integer, primary_key=True)
+    campus_id = db.Column(db.Integer, db.ForeignKey('campuses.id'), nullable=False, index=True)
     student_id = db.Column(db.Integer, db.ForeignKey('students.id'), nullable=False, index=True)
     subject_id = db.Column(db.Integer, db.ForeignKey('subjects.id'), nullable=False, index=True)
     term = db.Column(db.String(10), nullable=False)
@@ -141,6 +170,7 @@ class ExamMark(db.Model):
     )
 
     id = db.Column(db.Integer, primary_key=True)
+    campus_id = db.Column(db.Integer, db.ForeignKey('campuses.id'), nullable=False, index=True)
     student_id = db.Column(db.Integer, db.ForeignKey('students.id'), nullable=False, index=True)
     subject_id = db.Column(db.Integer, db.ForeignKey('subjects.id'), nullable=False, index=True)
     term = db.Column(db.String(10), nullable=False)
@@ -165,6 +195,7 @@ class PrincipalComment(db.Model):
     )
 
     id = db.Column(db.Integer, primary_key=True)
+    campus_id = db.Column(db.Integer, db.ForeignKey('campuses.id'), nullable=False, index=True)
     student_id = db.Column(db.Integer, db.ForeignKey('students.id'), nullable=False, index=True)
     subject_id = db.Column(db.Integer, db.ForeignKey('subjects.id'), nullable=False, index=True)
     term = db.Column(db.String(10), nullable=False)
@@ -184,6 +215,7 @@ class FeeAccount(db.Model):
     )
 
     id = db.Column(db.Integer, primary_key=True)
+    campus_id = db.Column(db.Integer, db.ForeignKey('campuses.id'), nullable=False, index=True)
     student_id = db.Column(db.Integer, db.ForeignKey('students.id'), nullable=False, index=True)
     term = db.Column(db.String(10), nullable=False, index=True)
     total_fees = db.Column(db.Float, default=0.0)
@@ -200,6 +232,7 @@ class Payment(db.Model):
     )
 
     id = db.Column(db.Integer, primary_key=True)
+    campus_id = db.Column(db.Integer, db.ForeignKey('campuses.id'), nullable=False, index=True)
     student_id = db.Column(db.Integer, db.ForeignKey('students.id'), nullable=False, index=True)
     receipt_number = db.Column(db.String(50), unique=True, nullable=False)
     amount = db.Column(db.Float, nullable=False)
@@ -217,15 +250,21 @@ class FeeSetting(db.Model):
     __tablename__ = 'fee_settings'
 
     id = db.Column(db.Integer, primary_key=True)
-    form = db.Column(db.String(10), unique=True, nullable=False)
+    campus_id = db.Column(db.Integer, db.ForeignKey('campuses.id'), nullable=False, index=True)
+    form = db.Column(db.String(10), nullable=False)
     term_fee = db.Column(db.Float, default=0.0)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    __table_args__ = (
+        db.UniqueConstraint('campus_id', 'form', name='uq_fee_settings_campus_form'),
+    )
 
 
 class TeacherRemark(db.Model):
     __tablename__ = 'teacher_remarks'
 
     id = db.Column(db.Integer, primary_key=True)
+    campus_id = db.Column(db.Integer, db.ForeignKey('campuses.id'), nullable=False, index=True)
     student_id = db.Column(db.Integer, db.ForeignKey('students.id'), nullable=False, index=True)
     teacher_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, index=True)
     remark = db.Column(db.Text, nullable=False)
@@ -239,6 +278,7 @@ class Timetable(db.Model):
     __tablename__ = 'timetables'
 
     id = db.Column(db.Integer, primary_key=True)
+    campus_id = db.Column(db.Integer, db.ForeignKey('campuses.id'), nullable=False, index=True)
     form = db.Column(db.String(10), nullable=False, index=True)
     day_of_week = db.Column(db.String(15), nullable=False)
     subject_id = db.Column(db.Integer, db.ForeignKey('subjects.id'), nullable=False, index=True)
@@ -256,6 +296,7 @@ class ExamTimetable(db.Model):
     __tablename__ = 'exam_timetables'
 
     id = db.Column(db.Integer, primary_key=True)
+    campus_id = db.Column(db.Integer, db.ForeignKey('campuses.id'), nullable=False, index=True)
     form = db.Column(db.String(10), nullable=False, index=True)
     subject_id = db.Column(db.Integer, db.ForeignKey('subjects.id'), nullable=False, index=True)
     exam_date = db.Column(db.Date, nullable=False)
@@ -274,6 +315,7 @@ class ActivityLog(db.Model):
     )
 
     id = db.Column(db.Integer, primary_key=True)
+    campus_id = db.Column(db.Integer, db.ForeignKey('campuses.id'), nullable=False, index=True)
     action = db.Column(db.String(100), nullable=False)
     description = db.Column(db.Text)
     visibility = db.Column(db.String(10), default='public', index=True)
@@ -289,6 +331,7 @@ class Activity(db.Model):
     __tablename__ = 'activities'
 
     id = db.Column(db.Integer, primary_key=True)
+    campus_id = db.Column(db.Integer, db.ForeignKey('campuses.id'), nullable=False, index=True)
     title = db.Column(db.String(200), nullable=False)
     description = db.Column(db.Text)
     visibility = db.Column(db.String(10), default='all')
@@ -302,6 +345,7 @@ class StaffLeave(db.Model):
     __tablename__ = 'staff_leaves'
 
     id = db.Column(db.Integer, primary_key=True)
+    campus_id = db.Column(db.Integer, db.ForeignKey('campuses.id'), nullable=False, index=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, index=True)
     leave_type = db.Column(db.String(50), nullable=False)
     start_date = db.Column(db.Date, nullable=False)
@@ -317,6 +361,7 @@ class LevyFund(db.Model):
     __tablename__ = 'levy_funds'
 
     id = db.Column(db.Integer, primary_key=True)
+    campus_id = db.Column(db.Integer, db.ForeignKey('campuses.id'), nullable=False, index=True)
     name = db.Column(db.String(100), nullable=False)
     total_amount = db.Column(db.Float, default=0.0)
     amount_collected = db.Column(db.Float, default=0.0)

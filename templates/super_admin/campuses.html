@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}Campuses - SchoolBridge{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h4 class="mb-1">Campuses</h4>
+        <p class="text-muted mb-0">Create and manage campuses across the group.</p>
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header"><h5 class="mb-0"><i class="bi bi-building-add"></i> New Campus</h5></div>
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('super_admin_add_campus') }}">
+                    <div class="mb-3">
+                        <label class="form-label">Name</label>
+                        <input type="text" class="form-control" name="name" required placeholder="e.g. Harare Campus">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Code (short, unique)</label>
+                        <input type="text" class="form-control" name="code" required placeholder="e.g. HRE">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Address</label>
+                        <input type="text" class="form-control" name="address" placeholder="e.g. 123 School Road">
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100"><i class="bi bi-plus-lg"></i> Create Campus</button>
+                </form>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header"><h5 class="mb-0"><i class="bi bi-buildings"></i> Campus List</h5></div>
+            <div class="card-body">
+                {% if campuses %}
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr><th>Name</th><th>Code</th><th>Address</th><th>Students</th><th>Staff</th><th>Actions</th></tr>
+                        </thead>
+                        <tbody>
+                            {% for c in campuses %}
+                            <tr>
+                                <td><strong>{{ c.name }}</strong></td>
+                                <td><span class="badge bg-secondary">{{ c.code }}</span></td>
+                                <td><small>{{ c.address or '-' }}</small></td>
+                                <td>{{ c.student_count }}</td>
+                                <td>{{ c.staff_count }}</td>
+                                <td>
+                                    <a href="{{ url_for('super_admin_campus_staff', campus_id=c.id) }}" class="btn btn-sm btn-outline-primary"><i class="bi bi-people"></i> Staff</a>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <p class="text-muted">No campuses created yet.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

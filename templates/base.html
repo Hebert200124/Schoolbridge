@@ -21,7 +21,12 @@
             <div class="collapse navbar-collapse" id="navbarNav">
                 <ul class="navbar-nav me-auto">
                     {% if current_user.role is defined %}
+                        {% if current_user.role == 'super_admin' %}
+                        <li class="nav-item"><a class="nav-link" href="{{ url_for('super_admin_dashboard') }}"><i class="bi bi-speedometer2"></i> Dashboard</a></li>
+                        <li class="nav-item"><a class="nav-link" href="{{ url_for('super_admin_campuses') }}"><i class="bi bi-building"></i> Campuses</a></li>
+                        {% else %}
                         <li class="nav-item"><a class="nav-link" href="{{ url_for('staff_dashboard') }}"><i class="bi bi-speedometer2"></i> Dashboard</a></li>
+                        {% endif %}
                         {% if current_user.role == 'teacher' %}
                         <li class="nav-item"><a class="nav-link" href="{{ url_for('teacher_class') }}"><i class="bi bi-people"></i> My Class</a></li>
                         <li class="nav-item"><a class="nav-link" href="{{ url_for('teacher_marks') }}"><i class="bi bi-pencil-square"></i> Marks Entry</a></li>

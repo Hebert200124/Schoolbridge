@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% block title %}{{ campus.name }} Staff - SchoolBridge{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h4 class="mb-1"><i class="bi bi-building"></i> {{ campus.name }}</h4>
+        <p class="text-muted mb-0">{{ campus.address or 'No address' }}</p>
+    </div>
+    <div>
+        <a href="{{ url_for('super_admin_campuses') }}" class="btn btn-outline-secondary"><i class="bi bi-arrow-left"></i> Back to Campuses</a>
+    </div>
+</div>
+
+<div class="row g-3">
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header"><h5 class="mb-0"><i class="bi bi-person-plus"></i> Assign Staff</h5></div>
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('super_admin_campus_staff', campus_id=campus.id) }}">
+                    <div class="mb-3">
+                        <label class="form-label">Full Name</label>
+                        <input type="text" class="form-control" name="full_name" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Username</label>
+                        <input type="text" class="form-control" name="username" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Role</label>
+                        <select class="form-select" name="role" required>
+                            <option value="principal">Principal</option>
+                            <option value="admin">Admin</option>
+                            <option value="cashier">Cashier</option>
+                            <option value="teacher">Teacher</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Email</label>
+                        <input type="email" class="form-control" name="email">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Phone</label>
+                        <input type="text" class="form-control" name="phone">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Password</label>
+                        <input type="password" class="form-control" name="password" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100"><i class="bi bi-person-plus-fill"></i> Assign</button>
+                </form>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header"><h5 class="mb-0"><i class="bi bi-people"></i> Staff ({{ staff|length }})</h5></div>
+            <div class="card-body">
+                {% if staff %}
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr><th>Name</th><th>Username</th><th>Role</th><th>Email</th><th>Phone</th><th>Actions</th></tr>
+                        </thead>
+                        <tbody>
+                            {% for s in staff %}
+                            <tr>
+                                <td>{{ s.full_name }}</td>
+                                <td><small>{{ s.username }}</small></td>
+                                <td><span class="badge bg-secondary">{{ s.role|title }}</span></td>
+                                <td><small>{{ s.email or '-' }}</small></td>
+                                <td><small>{{ s.phone or '-' }}</small></td>
+                                <td>
+                                    <form method="POST" action="{{ url_for('super_admin_fire_staff', campus_id=campus.id, staff_id=s.id) }}" class="d-inline" onsubmit="return confirm('Remove {{ s.full_name }}?')">
+                                        <button type="submit" class="btn btn-sm btn-outline-danger"><i class="bi bi-person-x"></i></button>
+                                    </form>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <p class="text-muted">No staff assigned to this campus yet.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
