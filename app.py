@@ -1467,10 +1467,21 @@ def principal_add_staff():
                 flash('Leave start date cannot be after end date.', 'danger')
                 return redirect(url_for('principal_add_staff'))
 
+        if role == 'teacher' and subject_id:
+            try:
+                subject_id = int(subject_id)
+            except (TypeError, ValueError):
+                flash('Please select a valid subject for the teacher.', 'danger')
+                return redirect(url_for('principal_add_staff'))
+        final_email = staff_email(username, email)
+        if User.query.filter(User.email == final_email).first():
+            flash('That email is already used by another staff member.', 'danger')
+            return redirect(url_for('principal_add_staff'))
+
         user = User(
-            username=username, email=staff_email(username, email), role=role, full_name=full_name,
+            username=username, email=final_email, role=role, full_name=full_name,
             phone=phone, reg_number=reg_number,
-            subject_id=int(subject_id) if subject_id and role == 'teacher' else None,
+            subject_id=subject_id if role == 'teacher' else None,
             campus_id=target_campus_id
         )
         user.set_password(password)
@@ -1502,11 +1513,22 @@ def principal_edit_staff(staff_id):
     subjects = scoped(Subject).all()
 
     if request.method == 'POST':
+        final_email = staff_email(staff_member.username, request.form.get('email'))
+        if User.query.filter(User.email == final_email, User.id != staff_member.id).first():
+            flash('That email is already used by another staff member.', 'danger')
+            return redirect(url_for('principal_edit_staff', staff_id=staff_id))
         staff_member.full_name = request.form.get('full_name')
-        staff_member.email = staff_email(staff_member.username, request.form.get('email'))
+        staff_member.email = final_email
         staff_member.phone = request.form.get('phone')
         staff_member.role = request.form.get('role')
-        staff_member.subject_id = int(request.form.get('subject_id')) if request.form.get('subject_id') and request.form.get('role') == 'teacher' else None
+        subj = request.form.get('subject_id')
+        if subj:
+            try:
+                subj = int(subj)
+            except (TypeError, ValueError):
+                flash('Please select a valid subject for the teacher.', 'danger')
+                return redirect(url_for('principal_edit_staff', staff_id=staff_id))
+        staff_member.subject_id = subj if request.form.get('role') == 'teacher' else None
         if request.form.get('password'):
             staff_member.set_password(request.form.get('password'))
         db.session.commit()
@@ -2052,9 +2074,19 @@ def super_admin_campus_staff(campus_id):
         if role == 'teacher' and not subject_id:
             flash('Please select the subject the teacher teaches.', 'danger')
             return redirect(url_for('super_admin_campus_staff', campus_id=campus.id))
-        user = User(username=username, email=staff_email(username, email), role=role, full_name=full_name,
+        if role == 'teacher':
+            try:
+                subject_id = int(subject_id)
+            except (TypeError, ValueError):
+                flash('Please select a valid subject for the teacher.', 'danger')
+                return redirect(url_for('super_admin_campus_staff', campus_id=campus.id))
+        final_email = staff_email(username, email)
+        if User.query.filter(User.email == final_email).first():
+            flash('That email is already used by another staff member.', 'danger')
+            return redirect(url_for('super_admin_campus_staff', campus_id=campus.id))
+        user = User(username=username, email=final_email, role=role, full_name=full_name,
                     phone=phone or None, reg_number=f'STF{username.upper()}', campus_id=campus.id,
-                    subject_id=int(subject_id) if subject_id and role == 'teacher' else None)
+                    subject_id=subject_id if role == 'teacher' else None)
         user.set_password(password)
         db.session.add(user)
         db.session.commit()
