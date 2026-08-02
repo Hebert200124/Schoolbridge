@@ -221,6 +221,8 @@ def compute_expected_fees(term, campus_id):
     """Expected fees = one term fee per student (their account total if set,
     otherwise the campus default for their form).
 
+    Counts every student on the campus (active or transferred) so the
+    expected figure matches the total the school is entitled to collect.
     Previously this was the raw sum of FeeAccount.total_fees, which could
     overcount when a student had duplicate accounts for the same term.
     """
@@ -229,7 +231,7 @@ def compute_expected_fees(term, campus_id):
     for a in accounts:
         by_student[a.student_id] = a.total_fees
     total = 0.0
-    for s in Student.query.filter_by(campus_id=campus_id, is_active=True).all():
+    for s in Student.query.filter_by(campus_id=campus_id).all():
         total += by_student.get(s.id, get_term_fee(s.form, campus_id=campus_id))
     return total
 
@@ -1243,6 +1245,30 @@ def admin_deactivate_student(student_id):
     status = 'reactivated' if student.is_active else 'deactivated (transferred)'
     db.session.commit()
     flash(f'Student {student.full_name} {status}.', 'info')
+    return redirect(url_for('admin_dashboard'))
+
+
+@app.route('/staff/admin/student/remove/<int:student_id>')
+@app.route('/staff/principal/student/remove/<int:student_id>')
+@login_required
+@role_required('admin', 'principal')
+def remove_student(student_id):
+    student = scoped_get_or_404(Student, student_id)
+    name = student.full_name
+    sid_label = student.student_id
+    sid = student.id
+
+    for model in (StudentSubject, MonthlyTest, ExamMark, PrincipalComment, FeeAccount, Payment, TeacherRemark):
+        db.session.query(model).filter(model.student_id == sid).delete(synchronize_session=False)
+    db.session.query(ActivityLog).filter(ActivityLog.student_id == sid).update(
+        {ActivityLog.student_id: None}, synchronize_session=False)
+
+    db.session.delete(student)
+    db.session.commit()
+    log_activity('Student removed', f'{name} ({sid_label}) permanently deleted', user=current_user)
+    flash(f'Student {name} has been permanently removed.', 'warning')
+    if current_user.role == 'principal':
+        return redirect(url_for('principal_dashboard'))
     return redirect(url_for('admin_dashboard'))
 
 

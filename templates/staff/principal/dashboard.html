@@ -43,6 +43,7 @@
                                     <a href="{{ url_for('principal_toggle_student_status', student_id=s.id) }}" class="btn btn-sm btn-outline-{{ 'danger' if s.is_active else 'success' }}" onclick="return confirm('{{ 'Deactivate' if s.is_active else 'Reactivate' }} {{ s.full_name }}?')">
                                         <i class="bi bi-{{ 'person-x' if s.is_active else 'person-check' }}"></i>
                                     </a>
+                                    <a href="{{ url_for('remove_student', student_id=s.id) }}" class="btn btn-sm btn-outline-danger" onclick="return confirm('Permanently remove {{ s.full_name }} and all their records? This cannot be undone.')"><i class="bi bi-trash"></i></a>
                                 </td>
                             </tr>
                             {% endfor %}
