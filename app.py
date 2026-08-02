@@ -1107,7 +1107,7 @@ def admin_add_student():
 
 @app.route('/staff/admin/students/import', methods=['GET', 'POST'])
 @login_required
-@role_required('admin')
+@role_required('admin', 'principal')
 def admin_import_students():
     if request.method == 'POST':
         file = request.files.get('file')
@@ -1178,14 +1178,17 @@ def admin_import_students():
         db.session.commit()
         log_activity('Bulk students imported', f'{added} students added via Excel upload', user=current_user)
         flash(f'Import complete: {added} student(s) added, {skipped} row(s) skipped. Default password: student123', 'success' if added else 'warning')
+        if current_user.role == 'principal':
+            return redirect(url_for('principal_dashboard'))
         return redirect(url_for('admin_dashboard'))
 
-    return render_template('staff/admin/import_students.html')
+    campuses = Campus.query.order_by(Campus.name).all() if getattr(g, 'is_super_admin', False) else []
+    return render_template('staff/admin/import_students.html', campuses=campuses)
 
 
 @app.route('/staff/admin/students/import/template')
 @login_required
-@role_required('admin')
+@role_required('admin', 'principal')
 def admin_import_student_template():
     import io
     import openpyxl
