@@ -1483,8 +1483,15 @@ def admin_delete_activity(id):
 @role_required('principal')
 def principal_dashboard():
     students = scoped(Student).order_by(Student.student_id).all()
+    return render_template('staff/principal/dashboard.html', students=students)
+
+
+@app.route('/staff/principal/staff')
+@login_required
+@role_required('principal')
+def principal_staff_list():
     staff = scoped(User).filter(User.role.notin_(['principal', 'super_admin'])).order_by(User.full_name).all()
-    return render_template('staff/principal/dashboard.html', students=students, staff=staff)
+    return render_template('staff/principal/staff_list.html', staff=staff)
 
 
 @app.route('/staff/principal/student/<int:student_id>/results')
