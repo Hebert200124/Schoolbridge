@@ -2148,6 +2148,51 @@ def super_admin_edit_campus(campus_id):
     return render_template('super_admin/edit_campus.html', campus=campus)
 
 
+@app.route('/super-admin/campuses/<int:campus_id>/delete', methods=['POST'])
+@login_required
+@super_admin_required
+def super_admin_delete_campus(campus_id):
+    campus = Campus.query.get_or_404(campus_id)
+    if campus.code == 'MAIN':
+        flash('The Main Campus cannot be deleted.', 'danger')
+        return redirect(url_for('super_admin_campuses'))
+    if campus.staff_count > 0 or campus.student_count > 0:
+        flash(f'{campus.name} still has staff/students. Remove or move them before deleting the campus.', 'danger')
+        return redirect(url_for('super_admin_campuses'))
+
+    cid = campus.id
+    student_ids = db.session.query(Student.id).filter_by(campus_id=cid)
+    # Detach teachers of ANY campus from this campus's subjects before the
+    # subjects are removed, so their subject_id FK cannot go dangling.
+    subj_ids = db.session.query(Subject.id).filter_by(campus_id=cid)
+    User.query.filter(User.subject_id.in_(subj_ids)).update({User.subject_id: None}, synchronize_session=False)
+
+    StaffLeave.query.filter_by(campus_id=cid).delete(synchronize_session=False)
+    ActivityLog.query.filter_by(campus_id=cid).delete(synchronize_session=False)
+    Activity.query.filter_by(campus_id=cid).delete(synchronize_session=False)
+    Timetable.query.filter_by(campus_id=cid).delete(synchronize_session=False)
+    ExamTimetable.query.filter_by(campus_id=cid).delete(synchronize_session=False)
+    TeacherRemark.query.filter_by(campus_id=cid).delete(synchronize_session=False)
+    PrincipalComment.query.filter_by(campus_id=cid).delete(synchronize_session=False)
+    Payment.query.filter_by(campus_id=cid).delete(synchronize_session=False)
+    FeeAccount.query.filter_by(campus_id=cid).delete(synchronize_session=False)
+    ExamMark.query.filter_by(campus_id=cid).delete(synchronize_session=False)
+    MonthlyTest.query.filter_by(campus_id=cid).delete(synchronize_session=False)
+    StudentSubject.query.filter(StudentSubject.student_id.in_(student_ids)).delete(synchronize_session=False)
+    Student.query.filter_by(campus_id=cid).delete(synchronize_session=False)
+    FeeSetting.query.filter_by(campus_id=cid).delete(synchronize_session=False)
+    Subject.query.filter_by(campus_id=cid).delete(synchronize_session=False)
+    User.query.filter_by(campus_id=cid).delete(synchronize_session=False)
+
+    db.session.flush()
+    log_activity('Campus deleted', f'{campus.name} ({campus.code}) removed', user=current_user, campus_id=cid)
+    ActivityLog.query.filter_by(campus_id=cid).delete(synchronize_session=False)
+    db.session.delete(campus)
+    db.session.commit()
+    flash(f'Campus {campus.name} deleted.', 'success')
+    return redirect(url_for('super_admin_campuses'))
+
+
 
 @app.route('/super-admin/campuses/<int:campus_id>/staff', methods=['GET', 'POST'])
 @login_required
