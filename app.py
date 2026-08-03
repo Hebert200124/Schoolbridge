@@ -12,6 +12,7 @@ import traceback
 import sib_api_v3_sdk
 from sib_api_v3_sdk.rest import ApiException
 from sqlalchemy.orm import joinedload, selectinload
+from sqlalchemy.exc import IntegrityError
 from email_validator import validate_email, EmailNotValidError
 
 try:
@@ -97,30 +98,82 @@ def _ensure_per_campus_uniques():
             return
         if 'campuses' not in inspect(db.engine).get_table_names():
             return
-        with db.engine.begin() as conn:
-            for table, column, new_name in [
-                ('subjects', 'code', 'uq_subjects_campus_code'),
-                ('fee_settings', 'form', 'uq_fee_settings_campus_form'),
-            ]:
-                inspector = inspect(db.engine)
-                if table not in inspector.get_table_names():
-                    continue
-                cols = {c['name'] for c in inspector.get_columns(table)}
-                if 'campus_id' not in cols:
-                    continue
-                existing = {uc['name']: uc.get('column_names') for uc in inspector.get_unique_constraints(table)}
-                for uc_name, uc_cols in list(existing.items()):
-                    if uc_cols == [column]:
-                        print(f'[migration] drop global unique {uc_name} on {table}')
-                        conn.execute(text(f'ALTER TABLE {table} DROP CONSTRAINT "{uc_name}"'))
-                if new_name not in existing:
-                    print(f'[migration] add per-campus unique {new_name} on {table}')
-                    conn.execute(text(
-                        f'ALTER TABLE {table} ADD CONSTRAINT {new_name} '
-                        f'UNIQUE (campus_id, {column}) NOT VALID'))
-                    conn.execute(text(f'ALTER TABLE {table} VALIDATE CONSTRAINT {new_name}'))
+        for table, column, new_name in [
+            ('subjects', 'code', 'uq_subjects_campus_code'),
+            ('fee_settings', 'form', 'uq_fee_settings_campus_form'),
+        ]:
+            try:
+                _migrate_table_uniques(table, column, new_name)
+            except Exception as exc:
+                print(f'[migration] {table} per-campus unique skipped: {exc}')
     except Exception as exc:
         print(f'[migration] per-campus uniques skipped: {exc}')
+
+
+def _migrate_table_uniques(table, column, new_name):
+    """Drop the legacy global unique on one column and add a per-campus one.
+
+    Each table runs in its own transaction so a failure on one never rolls
+    back the other. Postgres stores a column-level `unique=True` as the unique
+    constraint/index `subjects_code_key`; it can be a constraint, a standalone
+    index, or both, so this inspects the pg catalogs directly instead of
+    relying on SQLAlchemy's constraint reflection.
+    """
+    with db.engine.begin() as conn:
+        inspector = inspect(db.engine)
+        if table not in inspector.get_table_names():
+            return
+        cols = {c['name'] for c in inspector.get_columns(table)}
+        if 'campus_id' not in cols:
+            return
+
+        # 1) Drop a unique CONSTRAINT whose only column is `column`.
+        #    DROP CONSTRAINT also removes its backing index.
+        const_rows = conn.execute(text('''
+            SELECT c.conname
+            FROM pg_constraint c
+            JOIN pg_class t ON t.oid = c.conrelid
+            JOIN pg_namespace n ON n.oid = t.relnamespace
+            WHERE n.nspname = current_schema()
+              AND t.relname = :t
+              AND c.contype = 'u'
+              AND array_length(c.conkey, 1) = 1
+              AND c.conkey::int[] = (
+                  SELECT ARRAY[attnum] FROM pg_attribute a
+                  WHERE a.attrelid = t.oid AND a.attname = :col)
+        '''), {'t': table, 'col': column}).fetchall()
+        for (conname,) in const_rows:
+            print(f'[migration] drop global unique constraint {conname} on {table}')
+            conn.execute(text(f'ALTER TABLE {table} DROP CONSTRAINT IF EXISTS "{conname}"'))
+
+        # 2) Drop a standalone unique INDEX on `column` (no backing constraint).
+        #    Runs after the constraint drop so constraint-backed indexes are
+        #    already gone and cannot trigger the "constraint requires it" error.
+        idx_rows = conn.execute(text('''
+            SELECT i.relname
+            FROM pg_index x
+            JOIN pg_class i ON i.oid = x.indexrelid
+            JOIN pg_class t ON t.oid = x.indrelid
+            JOIN pg_namespace n ON n.oid = t.relnamespace
+            WHERE n.nspname = current_schema()
+              AND t.relname = :t
+              AND x.indisunique
+              AND x.indnkeyatts = 1
+              AND (SELECT a.attname FROM pg_attribute a
+                   WHERE a.attrelid = t.oid AND a.attnum = x.indkey[0]) = :col
+        '''), {'t': table, 'col': column}).fetchall()
+        for (idxname,) in idx_rows:
+            print(f'[migration] drop global unique index {idxname} on {table}')
+            conn.execute(text(f'DROP INDEX IF EXISTS "{idxname}"'))
+
+        # 3) Add the per-campus unique constraint if it is not already there.
+        existing = {uc['name'] for uc in inspector.get_unique_constraints(table)}
+        if new_name not in existing:
+            print(f'[migration] add per-campus unique {new_name} on {table}')
+            conn.execute(text(
+                f'ALTER TABLE {table} ADD CONSTRAINT {new_name} '
+                f'UNIQUE (campus_id, {column}) NOT VALID'))
+            conn.execute(text(f'ALTER TABLE {table} VALIDATE CONSTRAINT {new_name}'))
 
 db.init_app(app)
 with app.app_context():
@@ -2137,7 +2190,8 @@ def super_admin_campus_staff(campus_id):
         return redirect(url_for('super_admin_campus_staff', campus_id=campus.id))
 
     staff = User.query.filter(User.campus_id == campus.id, User.role != 'super_admin').order_by(User.full_name).all()
-    seed_campus_subjects(campus.id)
+    if not seed_campus_subjects(campus.id):
+        flash('Could not seed standard subjects for this campus; the page may be incomplete.', 'warning')
     subjects = Subject.query.filter_by(campus_id=campus.id).order_by(Subject.name).all()
     return render_template('super_admin/campus_staff.html', campus=campus, staff=staff, subjects=subjects)
 
@@ -2192,11 +2246,27 @@ DEFAULT_A_LEVEL_SUBJECTS = [
 def seed_campus_subjects(campus_id):
     """Create the standard O/A level subjects for a campus if it has none."""
     if Subject.query.filter_by(campus_id=campus_id).count() > 0:
-        return False
-    for name, code, level in DEFAULT_O_LEVEL_SUBJECTS + DEFAULT_A_LEVEL_SUBJECTS:
-        db.session.add(Subject(name=name, code=code, level=level, campus_id=campus_id))
-    db.session.commit()
-    return True
+        return True
+    try:
+        for name, code, level in DEFAULT_O_LEVEL_SUBJECTS + DEFAULT_A_LEVEL_SUBJECTS:
+            db.session.add(Subject(name=name, code=code, level=level, campus_id=campus_id))
+        db.session.commit()
+        return True
+    except IntegrityError:
+        # Legacy global unique index/constraint still present (deploy lag).
+        # Drop it on demand and retry so this page can never 500 on seed failure.
+        db.session.rollback()
+        try:
+            if db.engine.dialect.name == 'postgresql':
+                _migrate_table_uniques('subjects', 'code', 'uq_subjects_campus_code')
+            for name, code, level in DEFAULT_O_LEVEL_SUBJECTS + DEFAULT_A_LEVEL_SUBJECTS:
+                db.session.add(Subject(name=name, code=code, level=level, campus_id=campus_id))
+            db.session.commit()
+            return True
+        except Exception as exc:
+            db.session.rollback()
+            print(f'[seed] retry failed after legacy drop: {exc}')
+            return False
 
 @app.route('/setup')
 def setup():
