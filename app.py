@@ -2243,12 +2243,24 @@ DEFAULT_A_LEVEL_SUBJECTS = [
 ]
 
 
+def _campus_missing_subjects(campus_id):
+    existing = {code for (code,) in db.session.query(Subject.code).filter_by(campus_id=campus_id).all()}
+    return [(name, code, level) for name, code, level in DEFAULT_O_LEVEL_SUBJECTS + DEFAULT_A_LEVEL_SUBJECTS
+            if code not in existing]
+
+
 def seed_campus_subjects(campus_id):
-    """Create the standard O/A level subjects for a campus if it has none."""
-    if Subject.query.filter_by(campus_id=campus_id).count() > 0:
+    """Ensure a campus has ALL standard ZIMSEC O/A level subjects.
+
+    Adds every default subject that is missing for the campus (matched by
+    code), so existing campuses get filled in and new campuses get the full
+    set. Returns False only if the seed genuinely failed.
+    """
+    to_add = _campus_missing_subjects(campus_id)
+    if not to_add:
         return True
     try:
-        for name, code, level in DEFAULT_O_LEVEL_SUBJECTS + DEFAULT_A_LEVEL_SUBJECTS:
+        for name, code, level in to_add:
             db.session.add(Subject(name=name, code=code, level=level, campus_id=campus_id))
         db.session.commit()
         return True
@@ -2259,7 +2271,7 @@ def seed_campus_subjects(campus_id):
         try:
             if db.engine.dialect.name == 'postgresql':
                 _migrate_table_uniques('subjects', 'code', 'uq_subjects_campus_code')
-            for name, code, level in DEFAULT_O_LEVEL_SUBJECTS + DEFAULT_A_LEVEL_SUBJECTS:
+            for name, code, level in _campus_missing_subjects(campus_id):
                 db.session.add(Subject(name=name, code=code, level=level, campus_id=campus_id))
             db.session.commit()
             return True
@@ -2267,6 +2279,15 @@ def seed_campus_subjects(campus_id):
             db.session.rollback()
             print(f'[seed] retry failed after legacy drop: {exc}')
             return False
+
+
+def _ensure_all_campus_subjects():
+    """Fill every campus with the full ZIMSEC O/A level subject list."""
+    try:
+        for campus in Campus.query.all():
+            seed_campus_subjects(campus.id)
+    except Exception as exc:
+        print(f'[migration] campus subject sync skipped: {exc}')
 
 @app.route('/setup')
 def setup():
@@ -2401,6 +2422,11 @@ with app.app_context():
     except Exception as exc:
         db.session.rollback()
         print(f'[migration] A-Level math subject update skipped: {exc}')
+    try:
+        _ensure_all_campus_subjects()
+    except Exception as exc:
+        db.session.rollback()
+        print(f'[migration] campus subject sync skipped: {exc}')
 
 
 # ============ SECURITY ============
