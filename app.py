@@ -115,38 +115,36 @@ def _migrate_table_uniques(table, column, new_name):
 
     Postgres stores a column-level `unique=True` as the unique constraint/index
     `<table>_<column>_key`; it can be a constraint, a standalone index, or
-    both. Every statement is individually guarded so one failure can never
-    block the others or raise out of this function.
+    both. The DROPs run on an AUTOCOMMIT connection so they are permanent even
+    if a later step fails (a failed statement inside a normal transaction would
+    abort and roll back the drop too). Adding the per-campus unique is
+    best-effort and optional for seeding to work.
     """
-    legacy_names = [f'{table}_{column}_key', f'uq_{table}_{column}']
-    with db.engine.begin() as conn:
-        try:
-            inspector = inspect(db.engine)
-            if table not in inspector.get_table_names():
-                return
-            cols = {c['name'] for c in inspector.get_columns(table)}
-            if 'campus_id' not in cols:
-                return
-        except Exception as exc:
-            print(f'[migration] inspect {table} failed: {exc}')
+    try:
+        inspector = inspect(db.engine)
+        if table not in inspector.get_table_names():
             return
+        cols = {c['name'] for c in inspector.get_columns(table)}
+        if 'campus_id' not in cols:
+            return
+    except Exception as exc:
+        print(f'[migration] inspect {table} failed: {exc}')
+        return
 
-        # 1) Drop legacy uniques by their canonical names. DROP CONSTRAINT
-        #    removes a constraint and its backing index; DROP INDEX handles a
-        #    standalone index. Each is guarded so one name missing never stops
-        #    the rest.
-        for name in legacy_names:
+    with db.engine.connect().execution_options(isolation_level='AUTOCOMMIT') as conn:
+        for name in [f'{table}_{column}_key', f'uq_{table}_{column}']:
             try:
                 conn.execute(text(f'ALTER TABLE {table} DROP CONSTRAINT IF EXISTS "{name}"'))
+                print(f'[migration] dropped constraint {name} on {table}')
             except Exception as exc:
                 print(f'[migration] drop constraint {name} failed: {exc}')
             try:
                 conn.execute(text(f'DROP INDEX IF EXISTS "{name}"'))
+                print(f'[migration] dropped index {name} on {table}')
             except Exception as exc:
                 print(f'[migration] drop index {name} failed: {exc}')
-
-        # 2) Fallback: drop ANY single-column unique index on `column` (guards
-        #    against a legacy index with a non-standard name).
+        # Fallback: drop ANY single-column unique index on `column` (guards
+        # against a legacy index with a non-standard name).
         try:
             idx_rows = conn.execute(text('''
                 SELECT i.relname
@@ -164,21 +162,24 @@ def _migrate_table_uniques(table, column, new_name):
             for (idxname,) in idx_rows:
                 try:
                     conn.execute(text(f'DROP INDEX IF EXISTS "{idxname}"'))
+                    print(f'[migration] dropped catalog index {idxname} on {table}')
                 except Exception as exc:
                     print(f'[migration] catalog index drop {idxname} failed: {exc}')
         except Exception as exc:
             print(f'[migration] catalog index scan failed: {exc}')
 
-        # 3) Add the per-campus unique constraint if it is not already there.
-        try:
-            existing = {uc['name'] for uc in inspector.get_unique_constraints(table)}
+    # Add the per-campus unique in its own transaction; optional for seeding.
+    try:
+        with db.engine.begin() as conn:
+            existing = {uc['name'] for uc in inspect(db.engine).get_unique_constraints(table)}
             if new_name not in existing:
                 conn.execute(text(
                     f'ALTER TABLE {table} ADD CONSTRAINT {new_name} '
                     f'UNIQUE (campus_id, {column}) NOT VALID'))
                 conn.execute(text(f'ALTER TABLE {table} VALIDATE CONSTRAINT {new_name}'))
-        except Exception as exc:
-            print(f'[migration] add per-campus unique {new_name} failed: {exc}')
+                print(f'[migration] added per-campus unique {new_name} on {table}')
+    except Exception as exc:
+        print(f'[migration] add per-campus unique {new_name} skipped: {exc}')
 
 db.init_app(app)
 with app.app_context():
@@ -2196,7 +2197,7 @@ def super_admin_campus_staff(campus_id):
 
     staff = User.query.filter(User.campus_id == campus.id, User.role != 'super_admin').order_by(User.full_name).all()
     if not seed_campus_subjects(campus.id):
-        flash('Could not seed standard subjects for this campus; the page may be incomplete.', 'warning')
+        flash(f'Could not seed standard subjects for this campus; the page may be incomplete. {_last_seed_error or ""}', 'warning')
     subjects = Subject.query.filter_by(campus_id=campus.id).order_by(Subject.name).all()
     return render_template('super_admin/campus_staff.html', campus=campus, staff=staff, subjects=subjects)
 
@@ -2274,6 +2275,9 @@ def _seed_subjects_skipping_conflicts(campus_id):
     return True
 
 
+_last_seed_error = None
+
+
 def seed_campus_subjects(campus_id):
     """Ensure a campus has ALL standard ZIMSEC O/A level subjects.
 
@@ -2281,6 +2285,8 @@ def seed_campus_subjects(campus_id):
     code), so existing campuses get filled in and new campuses get the full
     set. Returns False only if the seed genuinely failed.
     """
+    global _last_seed_error
+    _last_seed_error = None
     to_add = _campus_missing_subjects(campus_id)
     if not to_add:
         return True
@@ -2289,15 +2295,16 @@ def seed_campus_subjects(campus_id):
             db.session.add(Subject(name=name, code=code, level=level, campus_id=campus_id))
         db.session.commit()
         return True
-    except IntegrityError:
+    except IntegrityError as exc:
+        _last_seed_error = f'{type(exc).__name__}: {exc}'
         # Legacy global unique index/constraint still present (deploy lag).
         # Drop it on demand and retry so this page can never 500 on seed failure.
         db.session.rollback()
         try:
             if db.engine.dialect.name == 'postgresql':
                 _migrate_table_uniques('subjects', 'code', 'uq_subjects_campus_code')
-        except Exception as exc:
-            print(f'[seed] on-demand legacy drop failed: {exc}')
+        except Exception as exc2:
+            print(f'[seed] on-demand legacy drop failed: {exc2}')
         return _seed_subjects_skipping_conflicts(campus_id)
 
 
