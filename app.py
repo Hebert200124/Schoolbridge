@@ -8,6 +8,7 @@ import os
 import re
 import random
 import string
+import traceback
 import sib_api_v3_sdk
 from sib_api_v3_sdk.rest import ApiException
 from sqlalchemy.orm import joinedload, selectinload
@@ -2392,6 +2393,13 @@ def parse_float_field(value, default=0.0):
         return float(value)
     except (TypeError, ValueError):
         return default
+
+
+@app.errorhandler(500)
+def _debug_500(e):
+    tb = traceback.format_exc()
+    app.logger.error('500 error:\n%s', tb)
+    return f'<html><body><h1>Internal Server Error</h1><pre>{tb}</pre></body></html>', 500
 
 
 if __name__ == '__main__':
