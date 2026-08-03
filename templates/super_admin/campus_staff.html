@@ -39,7 +39,7 @@
                         <select class="form-select" name="subject_id">
                             <option value="">-- Select Subject --</option>
                             {% for subj in subjects %}
-                            <option value="{{ subj.id }}">{{ subj.name }} ({{ subj.level }}) - {{ subj.campus.name }}</option>
+                            <option value="{{ subj.id }}">{{ subj.name }} ({{ subj.level }})</option>
                             {% endfor %}
                         </select>
                     </div>
