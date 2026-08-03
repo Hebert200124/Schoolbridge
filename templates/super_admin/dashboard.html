@@ -13,36 +13,44 @@
 
 <div class="row g-3 mb-4">
     <div class="col-md-3">
-        <div class="card">
+        <a href="{{ url_for('super_admin_campuses') }}" class="stat-link text-decoration-none">
+        <div class="card stat-card bg-primary text-white">
             <div class="card-body">
-                <h6 class="text-muted">Campuses</h6>
+                <h6 class="text-muted text-white-50">Campuses</h6>
                 <h3>{{ total_campuses }}</h3>
             </div>
         </div>
+        </a>
     </div>
     <div class="col-md-3">
-        <div class="card">
+        <a href="{{ url_for('principal_dashboard') }}#students" class="stat-link text-decoration-none">
+        <div class="card stat-card bg-success text-white">
             <div class="card-body">
-                <h6 class="text-muted">Total Students</h6>
+                <h6 class="text-muted text-white-50">Total Students</h6>
                 <h3>{{ total_students }}</h3>
             </div>
         </div>
+        </a>
     </div>
     <div class="col-md-3">
-        <div class="card">
+        <a href="{{ url_for('principal_dashboard') }}#staff" class="stat-link text-decoration-none">
+        <div class="card stat-card bg-info text-white">
             <div class="card-body">
-                <h6 class="text-muted">Total Staff</h6>
+                <h6 class="text-muted text-white-50">Total Staff</h6>
                 <h3>{{ total_staff }}</h3>
             </div>
         </div>
+        </a>
     </div>
     <div class="col-md-3">
-        <div class="card">
+        <a href="{{ url_for('super_admin_campuses') }}" class="stat-link text-decoration-none">
+        <div class="card stat-card bg-warning text-white">
             <div class="card-body">
-                <h6 class="text-muted">Fees Collected</h6>
+                <h6 class="text-muted text-white-50">Fees Collected</h6>
                 <h3>${{ '%.2f'|format(total_payments) }}</h3>
             </div>
         </div>
+        </a>
     </div>
 </div>
 
