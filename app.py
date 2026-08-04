@@ -191,7 +191,9 @@ with app.app_context():
         with db.engine.connect() as conn:
             conn.execute(text('ALTER TABLE students ADD COLUMN curriculum VARCHAR(20)'))
             conn.commit()
-    for col, typ in (('date_of_birth', 'VARCHAR(20)'), ('address', 'VARCHAR(255)')):
+    for col, typ in (('date_of_birth', 'VARCHAR(20)'), ('address', 'VARCHAR(255)'),
+                     ('next_of_kin_name', 'VARCHAR(100)'), ('next_of_kin_relationship', 'VARCHAR(50)'),
+                     ('next_of_kin_phone', 'VARCHAR(20)')):
         if col not in existing_columns:
             with db.engine.connect() as conn:
                 conn.execute(text(f'ALTER TABLE students ADD COLUMN {col} {typ}'))
@@ -1203,6 +1205,9 @@ def admin_add_student():
         curriculum = request.form.get('curriculum')
         email = request.form.get('email')
         phone = request.form.get('phone')
+        next_of_kin_name = request.form.get('next_of_kin_name')
+        next_of_kin_relationship = request.form.get('next_of_kin_relationship')
+        next_of_kin_phone = request.form.get('next_of_kin_phone')
         password = request.form.get('password')
         subject_ids = request.form.getlist('subjects')
 
@@ -1214,6 +1219,8 @@ def admin_add_student():
             student_id=student_id, first_name=first_name, last_name=last_name,
             date_of_birth=date_of_birth or None, address=address or None,
             form=form, curriculum=curriculum, email=email or None, phone=phone, reg_number=reg_number,
+            next_of_kin_name=next_of_kin_name or None, next_of_kin_relationship=next_of_kin_relationship or None,
+            next_of_kin_phone=next_of_kin_phone or None,
             campus_id=target_campus_id
         )
         student.set_password(password or 'student123')
@@ -1361,6 +1368,9 @@ def admin_edit_student(student_id):
         student.curriculum = request.form.get('curriculum')
         student.email = request.form.get('email') or None
         student.phone = request.form.get('phone')
+        student.next_of_kin_name = request.form.get('next_of_kin_name') or None
+        student.next_of_kin_relationship = request.form.get('next_of_kin_relationship') or None
+        student.next_of_kin_phone = request.form.get('next_of_kin_phone') or None
         if request.form.get('password'):
             student.set_password(request.form.get('password'))
 

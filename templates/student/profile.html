@@ -76,6 +76,10 @@
                             <tr><th>Email Address</th><td>{{ current_user.email or '-' }}</td></tr>
                             <tr><th>Address</th><td>{{ current_user.address or '-' }}</td></tr>
                             <tr><th>Term</th><td><span class="badge bg-primary">{{ term }}</span></td></tr>
+                            <tr><th colspan="2" class="table-active">Next of Kin</th></tr>
+                            <tr><th>Name</th><td>{{ current_user.next_of_kin_name or '-' }}</td></tr>
+                            <tr><th>Relationship</th><td>{{ current_user.next_of_kin_relationship or '-' }}</td></tr>
+                            <tr><th>Contact Details</th><td>{{ current_user.next_of_kin_phone or '-' }}</td></tr>
                         </tbody>
                     </table>
                 </div>
