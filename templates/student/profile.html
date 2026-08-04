@@ -79,6 +79,21 @@
                         </tbody>
                     </table>
                 </div>
+                <hr class="my-3">
+                <h6 class="mb-2"><i class="bi bi-megaphone"></i> School Announcements</h6>
+                {% if recent_activity_posts %}
+                <ul class="list-group list-group-flush">
+                    {% for act in recent_activity_posts %}
+                    <li class="list-group-item px-0 py-2">
+                        <small><strong>{{ act.title }}</strong><br>
+                        <span class="text-muted">{{ act.description or '' }}</span><br>
+                        <span class="text-muted small">{{ act.created_at.strftime('%d %b %Y %H:%M') }} &middot; by {{ act.creator.first_name }} {{ act.creator.last_name }}</span></small>
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% else %}
+                <p class="text-muted">No announcements yet.</p>
+                {% endif %}
             </div>
         </div>
     </div>
@@ -217,26 +232,4 @@
     </div>
 </div>
 
-<div class="row mt-3">
-    <div class="col-12">
-        <div class="card">
-            <div class="card-header"><h6 class="mb-0"><i class="bi bi-megaphone"></i> School Announcements</h6></div>
-            <div class="card-body p-0">
-                {% if recent_activity_posts %}
-                <ul class="list-group list-group-flush">
-                    {% for act in recent_activity_posts %}
-                    <li class="list-group-item py-2">
-                        <small><strong>{{ act.title }}</strong><br>
-                        <span class="text-muted">{{ act.description or '' }}</span><br>
-                        <span class="text-muted small">{{ act.created_at.strftime('%d %b %Y %H:%M') }} &middot; by {{ act.creator.first_name }} {{ act.creator.last_name }}</span></small>
-                    </li>
-                    {% endfor %}
-                </ul>
-                {% else %}
-                <div class="p-3 text-muted">No announcements yet.</div>
-                {% endif %}
-            </div>
-        </div>
-    </div>
-</div>
 {% endblock %}
