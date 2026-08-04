@@ -1,40 +1,87 @@
-{% extends "base.html" %}
-{% block title %}Login - SchoolBridge{% endblock %}
-{% block content %}
-<div class="login-container">
-    <div class="card login-card">
-        <div class="login-header">
-            <h2><i class="bi bi-mortarboard-fill"></i> WELCOME TO SCHOOLBRIDGE</h2>
-            <p class="mb-0 opacity-75">School Management Portal</p>
-        </div>
-        <div class="card-body p-4">
-            <form method="POST" action="{{ url_for('auth_login') }}">
-                <div class="mb-3">
-                    <label class="form-label">Username / Student ID</label>
-                    <input type="text" class="form-control" name="username" required placeholder="Enter your username">
-                </div>
-                <div class="mb-3">
-                    <label class="form-label">Password</label>
-                    <div class="input-group">
-                        <input type="password" class="form-control" name="password" id="login-password" required placeholder="Enter your password">
-                        <button class="btn btn-outline-secondary" type="button" onclick="togglePassword('login-password')" tabindex="-1">
-                            <i class="bi bi-eye" id="login-password-icon"></i>
-                        </button>
-                    </div>
-                </div>
-                <button type="submit" class="btn btn-primary w-100"><i class="bi bi-box-arrow-in-right"></i> Login</button>
-            </form>
-            <hr class="my-4">
-            <div class="text-center">
-                <small class="text-muted">
-                    <i class="bi bi-info-circle"></i>
-                    NB: Forgot Password? <a href="{{ url_for('auth_reset_password') }}">Reset password</a>
-                </small>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - SchoolBridge</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body class="auth-body">
+    <div class="auth-card">
+        <div class="auth-sidebar">
+            <div class="auth-brand">
+                <i class="bi bi-mortarboard-fill auth-logo"></i>
+                <h1>SchoolBridge</h1>
+                <p class="auth-tagline mb-0">School Management Portal</p>
             </div>
-            <div class="text-center mt-2">
-                <small class="text-muted">Visit <a href="/setup">/setup</a> to initialize the system</small>
+            <div class="auth-about">
+                <h5>About SchoolBridge</h5>
+                <p>One platform for the whole school &mdash; students, teachers, admin and fees, all connected.</p>
+                <ul class="mb-0">
+                    <li>Student records &amp; results</li>
+                    <li>Exam &amp; pass rate tracking</li>
+                    <li>Fee management &amp; payments</li>
+                    <li>Class timetables &amp; announcements</li>
+                </ul>
+            </div>
+            <div class="auth-announcement">
+                <h6><i class="bi bi-megaphone"></i> Welcome Back</h6>
+                <p>Term is in full swing. Check your latest results, timetable and fee statement after signing in.</p>
+            </div>
+        </div>
+
+        <div class="auth-main">
+            <div class="auth-form-wrap">
+                <div class="auth-header">
+                    <h3>Sign In</h3>
+                    <p>Enter your username and password to continue</p>
+                </div>
+
+                {% with messages = get_flashed_messages(with_categories=true) %}
+                    {% if messages %}
+                        {% for category, message in messages %}
+                        <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+                            {{ message }}
+                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                        </div>
+                        {% endfor %}
+                    {% endif %}
+                {% endwith %}
+
+                <form method="POST" action="{{ url_for('auth_login') }}">
+                    <div class="mb-3">
+                        <label class="form-label">Username / Student ID</label>
+                        <input type="text" class="form-control" name="username" required placeholder="Enter your username">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Password</label>
+                        <div class="input-group">
+                            <input type="password" class="form-control" name="password" id="login-password" required placeholder="Enter your password">
+                            <button class="btn btn-outline-secondary" type="button" onclick="togglePassword('login-password')" tabindex="-1">
+                                <i class="bi bi-eye" id="login-password-icon"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100"><i class="bi bi-box-arrow-in-right"></i> Login</button>
+                </form>
+
+                <hr class="my-4">
+                <div class="text-center">
+                    <small class="text-muted">
+                        <i class="bi bi-info-circle"></i>
+                        NB: Forgot Password? <a href="{{ url_for('auth_reset_password') }}">Reset password</a>
+                    </small>
+                </div>
+                <div class="text-center mt-2">
+                    <small class="text-muted">Visit <a href="/setup">/setup</a> to initialize the system</small>
+                </div>
             </div>
         </div>
     </div>
-</div>
-{% endblock %}
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+</html>

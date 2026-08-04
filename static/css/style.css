@@ -159,28 +159,144 @@ a.stat-link .stat-card {
     background-color: #EDF0F5;
 }
 
-.login-container {
-    max-width: 450px;
-    margin: 5rem auto;
+/* ===== AUTH / LOGIN (two-column portal) ===== */
+
+.auth-body {
+    background: linear-gradient(135deg, var(--primary-dark) 0%, var(--primary) 55%, var(--primary-light) 120%);
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem 1rem;
 }
 
-.login-card {
-    border-radius: 15px;
+.auth-card {
+    display: flex;
+    max-width: 960px;
+    width: 100%;
+    border-radius: 18px;
     overflow: hidden;
-    box-shadow: 0 8px 30px rgba(51, 78, 104, 0.15);
+    box-shadow: 0 15px 45px rgba(0, 0, 0, 0.35);
+    background: var(--white);
 }
 
-.login-header {
-    background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+.auth-sidebar {
+    flex: 1 1 42%;
+    background: linear-gradient(160deg, var(--primary-dark) 0%, var(--primary) 70%, var(--primary-light) 130%);
     color: var(--white);
-    padding: 2rem;
-    text-align: center;
+    padding: 3rem 2.5rem;
+    display: flex;
+    flex-direction: column;
 }
 
-.login-header h2 {
+.auth-brand {
+    text-align: center;
+    margin-bottom: 2rem;
+}
+
+.auth-logo {
+    font-size: 3rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 0.75rem;
+    background: rgba(255, 255, 255, 0.12);
+    width: 90px;
+    height: 90px;
+    border-radius: 50%;
+}
+
+.auth-brand h1 {
+    font-size: 2rem;
+    font-weight: 800;
     margin: 0;
+    letter-spacing: 0.5px;
+}
+
+.auth-tagline {
+    color: rgba(255, 255, 255, 0.8);
+    font-size: 0.95rem;
+}
+
+.auth-about {
+    margin-bottom: 1.5rem;
+}
+
+.auth-about h5 {
+    font-size: 1rem;
     font-weight: 700;
-    font-size: 1.5rem;
+    border-bottom: 2px solid rgba(255, 255, 255, 0.25);
+    padding-bottom: 0.5rem;
+}
+
+.auth-about p {
+    font-size: 0.9rem;
+    color: rgba(255, 255, 255, 0.85);
+    line-height: 1.55;
+}
+
+.auth-about ul {
+    padding-left: 1.1rem;
+    font-size: 0.85rem;
+    color: rgba(255, 255, 255, 0.8);
+}
+
+.auth-about li {
+    margin-bottom: 0.35rem;
+}
+
+.auth-announcement {
+    margin-top: auto;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-left: 4px solid var(--accent-light);
+    border-radius: 10px;
+    padding: 1rem;
+}
+
+.auth-announcement h6 {
+    margin: 0 0 0.25rem;
+    font-weight: 700;
+}
+
+.auth-announcement p {
+    margin: 0;
+    font-size: 0.85rem;
+    color: rgba(255, 255, 255, 0.85);
+}
+
+.auth-main {
+    flex: 1 1 58%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 3rem 2.5rem;
+    background: var(--white);
+}
+
+.auth-form-wrap {
+    width: 100%;
+    max-width: 380px;
+}
+
+.auth-header {
+    margin-bottom: 1.75rem;
+}
+
+.auth-header h3 {
+    color: var(--primary);
+    font-weight: 700;
+    margin: 0 0 0.25rem;
+}
+
+.auth-header p {
+    color: #667;
+    margin: 0;
+}
+
+.auth-form-wrap .form-label {
+    font-weight: 600;
+    color: var(--primary-dark);
 }
 
 .btn-primary {
@@ -360,9 +476,10 @@ a:hover {
     .btn-sm { padding: 0.45rem 0.75rem; font-size: 0.85rem; min-height: 38px; }
     a.nav-link, .dropdown-item, .btn { min-height: 44px; display: inline-flex; align-items: center; }
 
-    .login-container { margin: 2rem 1rem; max-width: 100%; }
-    .login-header { padding: 1.5rem; }
-    .login-header h2 { font-size: 1.2rem; }
+    .auth-card { flex-direction: column; }
+    .auth-sidebar { padding: 2rem 1.5rem; }
+    .auth-logo { width: 72px; height: 72px; font-size: 2.4rem; }
+    .auth-main { padding: 2rem 1.5rem; }
 
     .modal-dialog { margin: 0.5rem; }
     .modal-body { padding: 1rem; }
