@@ -3,66 +3,7 @@
 {% block content %}
 <div class="page-header d-flex justify-content-between align-items-center">
     <h3><i class="bi bi-speedometer2"></i> Student Dashboard</h3>
-</div>
-
-<div class="row">
-    <div class="col-md">
-        <a href="{{ url_for('student_subjects') }}" class="stat-link text-decoration-none">
-        <div class="card stat-card bg-primary text-white">
-            <div class="card-body">
-                <div class="stat-icon"><i class="bi bi-book"></i></div>
-                <p class="stat-number">{{ subjects|length }}</p>
-                <p class="stat-label">Subjects</p>
-            </div>
-        </div>
-        </a>
-    </div>
-    <div class="col-md">
-        <a href="{{ url_for('student_results') }}" class="stat-link text-decoration-none">
-        <div class="card stat-card bg-success text-white">
-            <div class="card-body">
-                <div class="stat-icon"><i class="bi bi-file-text"></i></div>
-                <p class="stat-number">{{ monthly_tests|length }}</p>
-                <p class="stat-label">Monthly Tests</p>
-            </div>
-        </div>
-        </a>
-    </div>
-    <div class="col-md">
-        <a href="{{ url_for('student_results') }}" class="stat-link text-decoration-none">
-        <div class="card stat-card bg-info text-white">
-            <div class="card-body">
-                <div class="stat-icon"><i class="bi bi-journal"></i></div>
-                <p class="stat-number">{{ exam_marks|length }}</p>
-                <p class="stat-label">Exam Results</p>
-            </div>
-        </div>
-        </a>
-    </div>
-    <div class="col-md">
-        <a href="{{ url_for('student_finances') }}" class="stat-link text-decoration-none">
-        <div class="card stat-card bg-{{ 'success' if fee_account and fee_account.balance <= 0 else 'warning' }} text-white">
-            <div class="card-body">
-                <div class="stat-icon"><i class="bi bi-wallet2"></i></div>
-                {% if fee_account %}
-                <p class="stat-number">${{ "%.0f"|format(fee_account.balance) }}</p>
-                <p class="stat-label">{{ 'Cleared' if fee_account.balance <= 0 else 'Balance' }}</p>
-                {% else %}<p class="stat-number">-</p><p class="stat-label">Balance</p>{% endif %}
-            </div>
-        </div>
-        </a>
-    </div>
-    <div class="col-md">
-        <a href="{{ url_for('student_results') }}" class="stat-link text-decoration-none">
-        <div class="card stat-card bg-{{ 'success' if pass_rate >= 70 else 'warning' if pass_rate >= 50 else 'danger' }} text-white">
-            <div class="card-body">
-                <div class="stat-icon"><i class="bi bi-graph-up-arrow"></i></div>
-                <p class="stat-number">{{ pass_rate }}%</p>
-                <p class="stat-label">Pass Rate</p>
-            </div>
-        </div>
-        </a>
-    </div>
+    <a href="{{ url_for('student_profile') }}" class="btn btn-outline-primary"><i class="bi bi-person-vcard"></i> View Profile</a>
 </div>
 
 <div class="row mt-3">

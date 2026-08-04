@@ -461,7 +461,7 @@ def get_selected_campus_id():
 def index():
     if current_user.is_authenticated:
         if isinstance(current_user, Student):
-            return redirect(url_for('student_dashboard'))
+            return redirect(url_for('student_profile'))
         if getattr(current_user, 'role', '') == 'super_admin':
             return redirect(url_for('super_admin_dashboard'))
         return redirect(url_for('staff_dashboard'))
@@ -473,7 +473,7 @@ def index():
 def auth_login():
     if current_user.is_authenticated:
         if isinstance(current_user, Student):
-            return redirect(url_for('student_dashboard'))
+            return redirect(url_for('student_profile'))
         if getattr(current_user, 'role', '') == 'super_admin':
             return redirect(url_for('super_admin_dashboard'))
         return redirect(url_for('staff_dashboard'))
@@ -489,7 +489,7 @@ def auth_login():
                 return render_template('auth/login.html')
             login_user(student)
             flash(f'Welcome {student.full_name}!', 'success')
-            return redirect(url_for('student_dashboard'))
+            return redirect(url_for('student_profile'))
 
         user = User.query.filter_by(username=username).first()
         if user and user.check_password(password):
