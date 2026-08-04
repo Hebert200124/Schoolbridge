@@ -343,6 +343,20 @@ class Activity(db.Model):
     creator = db.relationship('User', backref='posted_activities', foreign_keys=[created_by])
 
 
+class Advertisement(db.Model):
+    __tablename__ = 'advertisements'
+
+    id = db.Column(db.Integer, primary_key=True)
+    title = db.Column(db.String(200), nullable=False)
+    body = db.Column(db.Text)
+    image_url = db.Column(db.String(500))
+    is_active = db.Column(db.Boolean, default=True, index=True)
+    created_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, index=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+
+    creator = db.relationship('User', backref='advertisements', foreign_keys=[created_by])
+
+
 class StaffLeave(db.Model):
     __tablename__ = 'staff_leaves'
 

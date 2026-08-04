@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}New Advertisement - SchoolBridge{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h4 class="mb-1">New Advertisement</h4>
+        <p class="text-muted mb-0">This will appear on the login page banner.</p>
+    </div>
+</div>
+
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        <div class="card">
+            <div class="card-header"><h5 class="mb-0"><i class="bi bi-megaphone"></i> Advertisement Details</h5></div>
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('super_admin_add_advertisement') }}">
+                    <div class="mb-3">
+                        <label class="form-label">Title</label>
+                        <input type="text" class="form-control" name="title" required placeholder="e.g. Trip to Chinhoyi Caves">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Body</label>
+                        <textarea class="form-control" name="body" rows="4" placeholder="Short advertisement text shown on the login page"></textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Image URL (optional)</label>
+                        <input type="url" class="form-control" name="image_url" placeholder="https://example.com/banner.jpg">
+                    </div>
+                    <div class="mb-3 form-check">
+                        <input type="checkbox" class="form-check-input" name="is_active" id="is_active" checked>
+                        <label class="form-check-label" for="is_active">Active (visible on login page)</label>
+                    </div>
+                    <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg"></i> Create Advertisement</button>
+                    <a href="{{ url_for('super_admin_advertisements') }}" class="btn btn-outline-secondary">Cancel</a>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

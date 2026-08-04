@@ -27,8 +27,13 @@
                 </ul>
             </div>
             <div class="auth-announcement">
+                {% if advertisement %}
+                <h6><i class="bi bi-megaphone"></i> {{ advertisement.title }}</h6>
+                <p>{{ advertisement.body or '' }}</p>
+                {% else %}
                 <h6><i class="bi bi-megaphone"></i> Welcome Back</h6>
                 <p>Term is in full swing. Check your latest results, timetable and fee statement after signing in.</p>
+                {% endif %}
             </div>
         </div>
 

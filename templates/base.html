@@ -27,6 +27,7 @@
                         <li class="nav-item"><a class="nav-link" href="{{ url_for('principal_dashboard') }}"><i class="bi bi-people"></i> Students</a></li>
                         <li class="nav-item"><a class="nav-link" href="{{ url_for('principal_staff_list') }}"><i class="bi bi-person-badge"></i> Staff</a></li>
                         <li class="nav-item"><a class="nav-link" href="{{ url_for('principal_fee_settings') }}"><i class="bi bi-currency-dollar"></i> Fees</a></li>
+                        <li class="nav-item"><a class="nav-link" href="{{ url_for('super_admin_advertisements') }}"><i class="bi bi-megaphone"></i> Advertisements</a></li>
                         {% else %}
                         <li class="nav-item"><a class="nav-link" href="{{ url_for('staff_dashboard') }}"><i class="bi bi-speedometer2"></i> Dashboard</a></li>
                         {% endif %}

@@ -1,6 +1,6 @@
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session, g, abort
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
-from models import db, User, Student, Subject, StudentSubject, MonthlyTest, ExamMark, FeeAccount, Payment, FeeSetting, Timetable, ExamTimetable, PrincipalComment, TeacherRemark, ActivityLog, Activity, StaffLeave, OTPCode, Campus, zim_grade
+from models import db, User, Student, Subject, StudentSubject, MonthlyTest, ExamMark, FeeAccount, Payment, FeeSetting, Timetable, ExamTimetable, PrincipalComment, TeacherRemark, ActivityLog, Activity, StaffLeave, OTPCode, Campus, Advertisement, zim_grade
 from config import Config
 from functools import wraps
 from datetime import datetime, date, timedelta
@@ -481,6 +481,8 @@ def index():
 @app.route('/auth/login', methods=['GET', 'POST'])
 @limiter.limit('5 per minute', methods=['POST'])
 def auth_login():
+    advertisement = Advertisement.query.filter_by(is_active=True).order_by(Advertisement.created_at.desc()).first()
+
     if current_user.is_authenticated:
         if isinstance(current_user, Student):
             return redirect(url_for('student_profile'))
@@ -496,7 +498,7 @@ def auth_login():
         if student and student.check_password(password):
             if not student.is_active:
                 flash('Account deactivated. Contact admin.', 'danger')
-                return render_template('auth/login.html')
+                return render_template('auth/login.html', advertisement=advertisement)
             login_user(student)
             flash(f'Welcome {student.full_name}!', 'success')
             return redirect(url_for('student_profile'))
@@ -505,7 +507,7 @@ def auth_login():
         if user and user.check_password(password):
             if not user.is_active:
                 flash('Account deactivated. Contact principal.', 'danger')
-                return render_template('auth/login.html')
+                return render_template('auth/login.html', advertisement=advertisement)
             login_user(user)
             flash(f'Welcome {user.full_name}!', 'success')
             if user.role == 'super_admin':
@@ -514,7 +516,7 @@ def auth_login():
 
         flash('Invalid username or password', 'danger')
 
-    return render_template('auth/login.html')
+    return render_template('auth/login.html', advertisement=advertisement)
 
 
 @app.route('/auth/logout')
@@ -2146,6 +2148,67 @@ def super_admin_dashboard():
                            term=term, pass_rates=pass_rates, form_pass_rates=form_pass_rates,
                            campus_pass_rates=campus_pass_rates, overall_rate=overall_rate,
                            overall_total=overall_total)
+
+
+@app.route('/super-admin/advertisements')
+@login_required
+@super_admin_required
+def super_admin_advertisements():
+    ads = Advertisement.query.order_by(Advertisement.created_at.desc()).all()
+    return render_template('super_admin/advertisements.html', ads=ads)
+
+
+@app.route('/super-admin/advertisements/add', methods=['GET', 'POST'])
+@login_required
+@super_admin_required
+def super_admin_add_advertisement():
+    if request.method == 'POST':
+        title = request.form.get('title')
+        if title:
+            ad = Advertisement(title=title, body=request.form.get('body'),
+                               image_url=request.form.get('image_url') or None,
+                               is_active='is_active' in request.form,
+                               created_by=current_user.id)
+            db.session.add(ad)
+            db.session.commit()
+            log_activity('Advertisement created', title, user=current_user)
+            flash('Advertisement created.', 'success')
+            return redirect(url_for('super_admin_advertisements'))
+        flash('Title is required.', 'danger')
+    return render_template('super_admin/add_advertisement.html')
+
+
+@app.route('/super-admin/advertisements/edit/<int:id>', methods=['GET', 'POST'])
+@login_required
+@super_admin_required
+def super_admin_edit_advertisement(id):
+    ad = Advertisement.query.get_or_404(id)
+    if request.method == 'POST':
+        title = request.form.get('title')
+        if title:
+            ad.title = title
+            ad.body = request.form.get('body')
+            ad.image_url = request.form.get('image_url') or None
+            ad.is_active = 'is_active' in request.form
+            db.session.commit()
+            log_activity('Advertisement updated', title, user=current_user)
+            flash('Advertisement updated.', 'success')
+            return redirect(url_for('super_admin_advertisements'))
+        flash('Title is required.', 'danger')
+    return render_template('super_admin/edit_advertisement.html', ad=ad)
+
+
+@app.route('/super-admin/advertisements/delete/<int:id>', methods=['POST'])
+@login_required
+@super_admin_required
+def super_admin_delete_advertisement(id):
+    ad = Advertisement.query.get_or_404(id)
+    title = ad.title
+    db.session.delete(ad)
+    db.session.commit()
+    log_activity('Advertisement deleted', title, user=current_user)
+    flash('Advertisement deleted.', 'success')
+    return redirect(url_for('super_admin_advertisements'))
 
 
 @app.route('/super-admin/campuses')
