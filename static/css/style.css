@@ -113,6 +113,28 @@ a.stat-link .stat-card {
 .stat-card.bg-info { background: linear-gradient(135deg, var(--primary-light), #627D98) !important; }
 .stat-card.bg-danger { background: linear-gradient(135deg, var(--danger), #e53935) !important; }
 
+.stat-sidebar .stat-card {
+    padding: 1rem 1.25rem;
+    margin-bottom: 0.75rem;
+}
+
+.stat-sidebar .stat-card:last-child {
+    margin-bottom: 0;
+}
+
+.stat-sidebar .stat-icon {
+    font-size: 1.6rem;
+    margin-bottom: 0.25rem;
+}
+
+.stat-sidebar .stat-number {
+    font-size: 1.5rem;
+}
+
+.stat-sidebar .stat-label {
+    font-size: 0.75rem;
+}
+
 .table th {
     background-color: var(--primary);
     color: var(--white);
