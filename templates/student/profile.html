@@ -83,4 +83,160 @@
         </div>
     </div>
 </div>
+
+<div class="row mt-3">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header"><h5 class="mb-0"><i class="bi bi-book"></i> My Subjects & Teachers</h5></div>
+            <div class="card-body">
+                {% if subjects %}
+                <div class="table-responsive">
+                <table class="table table-sm">
+                    <thead><tr><th>Subject</th><th>Level</th><th>Teacher</th><th>Email</th></tr></thead>
+                    <tbody>
+                        {% for subj in subjects %}
+                        {% set teacher = subject_teachers.get(subj.id) %}
+                        <tr>
+                            <td><strong>{{ subj.name }}</strong></td>
+                            <td><span class="badge bg-primary">{{ subj.level }}</span></td>
+                            <td>{{ teacher.full_name if teacher else 'TBA' }}</td>
+                            <td><small>{{ teacher.email if teacher else '-' }}</small></td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                </div>
+                {% else %}<p class="text-muted">No subjects assigned.</p>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header"><h5 class="mb-0"><i class="bi bi-graph-up"></i> My Pass Rates by Subject</h5></div>
+            <div class="card-body">
+                {% if subject_pass_rates %}
+                <div class="table-responsive">
+                <table class="table table-sm">
+                    <thead><tr><th>Subject</th><th>Pass Rate</th><th>Passed</th></tr></thead>
+                    <tbody>
+                        {% for pr in subject_pass_rates %}
+                        <tr>
+                            <td><strong>{{ pr.subject }}</strong></td>
+                            <td>
+                                <div class="progress" style="height:20px;">
+                                    <div class="progress-bar {% if pr.rate >= 50 %}bg-success{% else %}bg-danger{% endif %}" style="width:{{ pr.rate }}%">{{ pr.rate }}%</div>
+                                </div>
+                            </td>
+                            <td>{{ pr.passed }} / {{ pr.total }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                </div>
+                {% else %}<p class="text-muted">No exam results yet.</p>{% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-3">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header"><h5 class="mb-0"><i class="bi bi-wallet2"></i> Fee Account</h5></div>
+            <div class="card-body">
+                {% if fee_account %}
+                <p><strong>Term:</strong> {{ fee_account.term }} | <strong>Total:</strong> ${{ "%.2f"|format(fee_account.total_fees) }}</p>
+                <p><strong>Paid:</strong> ${{ "%.2f"|format(fee_account.amount_paid) }} | <strong>Balance:</strong>
+                    {% if fee_account.balance <= 0 %}
+                    <span class="text-success fw-bold">$0.00 (CLEARED)</span>
+                    {% else %}<span class="text-danger fw-bold">${{ "%.2f"|format(fee_account.balance) }}</span>{% endif %}
+                </p>
+                {% else %}<p class="text-muted">No fee account info.</p>{% endif %}
+                <a href="{{ url_for('student_finances') }}" class="btn btn-sm btn-outline-primary">View Full Statement</a>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header"><h5 class="mb-0"><i class="bi bi-chat-quote"></i> Teacher Remarks</h5></div>
+            <div class="card-body" style="max-height: 300px; overflow-y: auto;">
+                {% if teacher_remarks %}
+                {% for tr in teacher_remarks %}
+                <div class="p-2 mb-2 bg-light border-start border-3 border-primary">
+                    <small class="text-muted">{{ tr.teacher.full_name }} <span class="float-end">{{ tr.created_at.strftime('%d %b %Y') }}</span></small>
+                    <p class="mb-0"><em>{{ tr.remark }}</em></p>
+                </div>
+                {% endfor %}
+                {% else %}
+                <p class="text-muted">No remarks from teachers yet.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header"><h5 class="mb-0"><i class="bi bi-calendar-week"></i> Weekly Timetable</h5></div>
+            <div class="card-body">
+                {% if timetables %}
+                <div class="table-responsive">
+                <table class="table table-sm table-bordered">
+                    <thead><tr><th>Day</th><th>Time</th><th>Subject</th></tr></thead>
+                    <tbody>
+                        {% for tt in timetables[:10] %}
+                        <tr><td><strong>{{ tt.day_of_week[:3] }}</strong></td><td>{{ tt.start_time }}-{{ tt.end_time }}</td><td>{{ tt.subject_rel.name }}</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                </div>
+                <a href="{{ url_for('student_timetables') }}" class="btn btn-sm btn-outline-primary">Full Timetable</a>
+                {% else %}<p class="text-muted">No timetable published.</p>{% endif %}
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header"><h5 class="mb-0"><i class="bi bi-calendar-check"></i> Upcoming Exams</h5></div>
+            <div class="card-body">
+                {% if exam_timetables %}
+                <div class="table-responsive">
+                <table class="table table-sm table-bordered">
+                    <thead><tr><th>Date</th><th>Subject</th><th>Room</th></tr></thead>
+                    <tbody>
+                        {% for et in exam_timetables[:5] %}
+                        <tr><td>{{ et.exam_date.strftime('%d-%m-%Y') }}</td><td>{{ et.subject_rel.name }}</td><td>{{ et.room or '-' }}</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                </div>
+                <a href="{{ url_for('student_timetables') }}" class="btn btn-sm btn-outline-primary">View All</a>
+                {% else %}<p class="text-muted">No exam timetable published.</p>{% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-3">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header"><h6 class="mb-0"><i class="bi bi-megaphone"></i> School Announcements</h6></div>
+            <div class="card-body p-0">
+                {% if recent_activity_posts %}
+                <ul class="list-group list-group-flush">
+                    {% for act in recent_activity_posts %}
+                    <li class="list-group-item py-2">
+                        <small><strong>{{ act.title }}</strong><br>
+                        <span class="text-muted">{{ act.description or '' }}</span><br>
+                        <span class="text-muted small">{{ act.created_at.strftime('%d %b %Y %H:%M') }} &middot; by {{ act.creator.first_name }} {{ act.creator.last_name }}</span></small>
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% else %}
+                <div class="p-3 text-muted">No announcements yet.</div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}

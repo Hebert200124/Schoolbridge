@@ -1955,42 +1955,7 @@ def export_ministry_report():
 @login_required
 @student_required
 def student_dashboard():
-    subjects = [ss.subject for ss in current_user.subjects if ss.subject]
-    monthly_tests = MonthlyTest.query.filter_by(student_id=current_user.id).all()
-    exam_marks_list = ExamMark.query.filter_by(student_id=current_user.id).all()
-
-    total_exams = len(exam_marks_list)
-    passed_exams = sum(1 for e in exam_marks_list if e.total_marks > 0 and (e.marks / e.total_marks * 100) >= 50)
-    pass_rate = round(passed_exams / total_exams * 100) if total_exams else 0
-
-    subject_pass_rates = []
-    for subj in subjects:
-        marks = [e for e in exam_marks_list if e.subject_id == subj.id]
-        if marks:
-            passed = sum(1 for e in marks if e.total_marks > 0 and (e.marks / e.total_marks * 100) >= 50)
-            subject_pass_rates.append({'subject': subj.name, 'rate': round(passed / len(marks) * 100),
-                                       'passed': passed, 'total': len(marks)})
-
-    fee_account = FeeAccount.query.filter_by(student_id=current_user.id).first()
-    payments = Payment.query.filter_by(student_id=current_user.id).order_by(Payment.created_at.desc()).limit(10).all()
-    timetables = Timetable.query.filter_by(form=current_user.form, campus_id=current_user.campus_id).order_by(Timetable.day_of_week, Timetable.start_time).all()
-    exam_timetables = ExamTimetable.query.filter_by(form=current_user.form, campus_id=current_user.campus_id).order_by(ExamTimetable.exam_date).all()
-
-    # Get teacher for each subject
-    subject_teachers = {}
-    for subj in subjects:
-        teacher = User.query.filter_by(subject_id=subj.id, role='teacher').first()
-        subject_teachers[subj.id] = teacher
-
-    # Get teacher remarks for this student
-    teacher_remarks = TeacherRemark.query.filter_by(student_id=current_user.id).order_by(TeacherRemark.created_at.desc()).all()
-    recent_activity_posts = scoped(Activity).filter_by(visibility='all').order_by(Activity.created_at.desc()).limit(10).all()
-
-    return render_template('student/dashboard.html', subjects=subjects, monthly_tests=monthly_tests,
-                         exam_marks=exam_marks_list, fee_account=fee_account, payments=payments,
-                         timetables=timetables, exam_timetables=exam_timetables, subject_teachers=subject_teachers,
-                         teacher_remarks=teacher_remarks, recent_activity_posts=recent_activity_posts,
-                         pass_rate=pass_rate, subject_pass_rates=subject_pass_rates)
+    return redirect(url_for('student_profile'))
 
 
 @app.route('/student/profile')
@@ -2008,9 +1973,32 @@ def student_profile():
 
     initial = (current_user.first_name[:1] + '.') if current_user.first_name else '-'
 
+    subject_pass_rates = []
+    for subj in subjects:
+        marks = [e for e in exam_marks_list if e.subject_id == subj.id]
+        if marks:
+            passed = sum(1 for e in marks if e.total_marks > 0 and (e.marks / e.total_marks * 100) >= 50)
+            subject_pass_rates.append({'subject': subj.name, 'rate': round(passed / len(marks) * 100),
+                                       'passed': passed, 'total': len(marks)})
+
+    payments = Payment.query.filter_by(student_id=current_user.id).order_by(Payment.created_at.desc()).limit(10).all()
+    timetables = Timetable.query.filter_by(form=current_user.form, campus_id=current_user.campus_id).order_by(Timetable.day_of_week, Timetable.start_time).all()
+    exam_timetables = ExamTimetable.query.filter_by(form=current_user.form, campus_id=current_user.campus_id).order_by(ExamTimetable.exam_date).all()
+
+    subject_teachers = {}
+    for subj in subjects:
+        teacher = User.query.filter_by(subject_id=subj.id, role='teacher').first()
+        subject_teachers[subj.id] = teacher
+
+    teacher_remarks = TeacherRemark.query.filter_by(student_id=current_user.id).order_by(TeacherRemark.created_at.desc()).all()
+    recent_activity_posts = scoped(Activity).filter_by(visibility='all').order_by(Activity.created_at.desc()).limit(10).all()
+
     return render_template('student/profile.html', subjects=subjects, monthly_tests=monthly_tests,
                            exam_marks=exam_marks_list, fee_account=fee_account, pass_rate=pass_rate,
-                           initial=initial, term=get_current_term())
+                           initial=initial, term=get_current_term(), subject_pass_rates=subject_pass_rates,
+                           payments=payments, timetables=timetables, exam_timetables=exam_timetables,
+                           subject_teachers=subject_teachers, teacher_remarks=teacher_remarks,
+                           recent_activity_posts=recent_activity_posts)
 
 
 @app.route('/student/results')
