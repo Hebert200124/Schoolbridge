@@ -98,6 +98,8 @@ class Student(UserMixin, db.Model):
     student_id = db.Column(db.String(20), unique=True, nullable=False, index=True)
     first_name = db.Column(db.String(100), nullable=False)
     last_name = db.Column(db.String(100), nullable=False)
+    date_of_birth = db.Column(db.String(20))
+    address = db.Column(db.String(255))
     form = db.Column(db.String(10), nullable=False, index=True)
     curriculum = db.Column(db.String(10), default='ZIMSEC', index=True)
     email = db.Column(db.String(120), unique=True, index=True)

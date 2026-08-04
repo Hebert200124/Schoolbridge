@@ -191,6 +191,11 @@ with app.app_context():
         with db.engine.connect() as conn:
             conn.execute(text('ALTER TABLE students ADD COLUMN curriculum VARCHAR(20)'))
             conn.commit()
+    for col, typ in (('date_of_birth', 'VARCHAR(20)'), ('address', 'VARCHAR(255)')):
+        if col not in existing_columns:
+            with db.engine.connect() as conn:
+                conn.execute(text(f'ALTER TABLE students ADD COLUMN {col} {typ}'))
+                conn.commit()
 
     # otp_codes.phone stores the email address now; widen it on Postgres (VARCHAR(20) is too short)
     if db.engine.dialect.name == 'postgresql':
@@ -1173,6 +1178,8 @@ def admin_add_student():
     if request.method == 'POST':
         first_name = request.form.get('first_name')
         last_name = request.form.get('last_name')
+        date_of_birth = request.form.get('date_of_birth')
+        address = request.form.get('address')
         form = request.form.get('form')
         curriculum = request.form.get('curriculum')
         email = request.form.get('email')
@@ -1186,6 +1193,7 @@ def admin_add_student():
 
         student = Student(
             student_id=student_id, first_name=first_name, last_name=last_name,
+            date_of_birth=date_of_birth or None, address=address or None,
             form=form, curriculum=curriculum, email=email or None, phone=phone, reg_number=reg_number,
             campus_id=target_campus_id
         )
@@ -1328,6 +1336,8 @@ def admin_edit_student(student_id):
     if request.method == 'POST':
         student.first_name = request.form.get('first_name')
         student.last_name = request.form.get('last_name')
+        student.date_of_birth = request.form.get('date_of_birth') or None
+        student.address = request.form.get('address') or None
         student.form = request.form.get('form')
         student.curriculum = request.form.get('curriculum')
         student.email = request.form.get('email') or None
@@ -1981,6 +1991,26 @@ def student_dashboard():
                          timetables=timetables, exam_timetables=exam_timetables, subject_teachers=subject_teachers,
                          teacher_remarks=teacher_remarks, recent_activity_posts=recent_activity_posts,
                          pass_rate=pass_rate, subject_pass_rates=subject_pass_rates)
+
+
+@app.route('/student/profile')
+@login_required
+@student_required
+def student_profile():
+    subjects = [ss.subject for ss in current_user.subjects if ss.subject]
+    monthly_tests = MonthlyTest.query.filter_by(student_id=current_user.id).all()
+    exam_marks_list = ExamMark.query.filter_by(student_id=current_user.id).all()
+    fee_account = FeeAccount.query.filter_by(student_id=current_user.id).first()
+
+    total_exams = len(exam_marks_list)
+    passed_exams = sum(1 for e in exam_marks_list if e.total_marks > 0 and (e.marks / e.total_marks * 100) >= 50)
+    pass_rate = round(passed_exams / total_exams * 100) if total_exams else 0
+
+    initial = (current_user.first_name[:1] + '.') if current_user.first_name else '-'
+
+    return render_template('student/profile.html', subjects=subjects, monthly_tests=monthly_tests,
+                           exam_marks=exam_marks_list, fee_account=fee_account, pass_rate=pass_rate,
+                           initial=initial, term=get_current_term())
 
 
 @app.route('/student/results')

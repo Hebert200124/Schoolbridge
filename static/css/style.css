@@ -122,6 +122,17 @@ a.stat-link .stat-card {
     letter-spacing: 0.3px;
 }
 
+.table-profile th {
+    width: 40%;
+    vertical-align: middle;
+    white-space: nowrap;
+}
+
+.table-profile td {
+    vertical-align: middle;
+    font-weight: 500;
+}
+
 .table-hover tbody tr:hover {
     background-color: #EDF0F5;
 }
