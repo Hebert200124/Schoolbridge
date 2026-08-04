@@ -170,6 +170,57 @@
     {% endif %}
 </div>
 
+{% if current_user.role == 'teacher' %}
+<div class="row g-3 mb-4">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header"><h6 class="mb-0"><i class="bi bi-graph-up"></i> Pass Rates — {{ stats.subject_name }} ({{ stats.term }})</h6></div>
+            <div class="card-body">
+                {% if stats.teacher_pass_rates %}
+                {% set pr = stats.teacher_pass_rates[0] %}
+                <p class="mb-1">Overall Pass Rate</p>
+                <div class="progress" style="height:24px;">
+                    <div class="progress-bar {% if pr.rate >= 50 %}bg-success{% elif pr.rate >= 30 %}bg-warning{% else %}bg-danger{% endif %}" style="width:{{ pr.rate }}%">{{ pr.rate }}%</div>
+                </div>
+                <small class="text-muted">{{ pr.passed }} of {{ pr.total }} entries passed</small>
+                {% else %}
+                <p class="text-muted mb-0">No exam results yet.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header"><h6 class="mb-0"><i class="bi bi-bar-chart"></i> Pass Rate by Class ({{ stats.term }})</h6></div>
+            <div class="card-body p-0">
+                {% if stats.teacher_form_pass_rates %}
+                <div class="table-responsive">
+                    <table class="table table-sm mb-0">
+                        <thead><tr><th>Class</th><th>Pass Rate</th><th>Passed</th></tr></thead>
+                        <tbody>
+                            {% for fpr in stats.teacher_form_pass_rates %}
+                            <tr>
+                                <td>{{ fpr.form }}</td>
+                                <td>
+                                    <div class="progress" style="height:20px;">
+                                        <div class="progress-bar {% if fpr.rate >= 50 %}bg-success{% elif fpr.rate >= 30 %}bg-warning{% else %}bg-danger{% endif %}" style="width:{{ fpr.rate }}%">{{ fpr.rate }}%</div>
+                                    </div>
+                                </td>
+                                <td>{{ fpr.passed }} / {{ fpr.total }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="p-3 text-muted">No exam results yet.</div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
 {% if current_user.role in ('principal', 'admin') %}
 
 <div class="row g-3 mb-4">

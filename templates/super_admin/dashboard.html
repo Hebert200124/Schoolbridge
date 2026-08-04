@@ -54,6 +54,82 @@
     </div>
 </div>
 
+<div class="row g-3 mb-4">
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header"><h6 class="mb-0"><i class="bi bi-graph-up-arrow"></i> Overall Pass Rate ({{ term }})</h6></div>
+            <div class="card-body">
+                {% if overall_total %}
+                <div class="progress" style="height:28px;">
+                    <div class="progress-bar {% if overall_rate >= 50 %}bg-success{% elif overall_rate >= 30 %}bg-warning{% else %}bg-danger{% endif %}" style="width:{{ overall_rate }}%">{{ overall_rate }}%</div>
+                </div>
+                <small class="text-muted">Across all campuses &middot; {{ overall_total }} exam entries</small>
+                {% else %}
+                <p class="text-muted mb-0">No exam results yet.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header"><h6 class="mb-0"><i class="bi bi-buildings"></i> Pass Rate by Campus ({{ term }})</h6></div>
+            <div class="card-body p-0">
+                {% if campus_pass_rates %}
+                <div class="table-responsive">
+                    <table class="table table-sm mb-0">
+                        <thead><tr><th>Campus</th><th>Pass Rate</th><th>Entries</th></tr></thead>
+                        <tbody>
+                            {% for cpr in campus_pass_rates %}
+                            <tr>
+                                <td>{{ cpr.campus }}</td>
+                                <td>
+                                    <div class="progress" style="height:20px;">
+                                        <div class="progress-bar {% if cpr.rate >= 50 %}bg-success{% elif cpr.rate >= 30 %}bg-warning{% else %}bg-danger{% endif %}" style="width:{{ cpr.rate }}%">{{ cpr.rate }}%</div>
+                                    </div>
+                                </td>
+                                <td>{{ cpr.total }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="p-3 text-muted">No exam results yet.</div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header"><h6 class="mb-0"><i class="bi bi-bar-chart"></i> Pass Rate by Form ({{ term }})</h6></div>
+            <div class="card-body p-0">
+                {% if form_pass_rates %}
+                <div class="table-responsive">
+                    <table class="table table-sm mb-0">
+                        <thead><tr><th>Form</th><th>Pass Rate</th><th>Entries</th></tr></thead>
+                        <tbody>
+                            {% for fpr in form_pass_rates %}
+                            <tr>
+                                <td>{{ fpr.form }}</td>
+                                <td>
+                                    <div class="progress" style="height:20px;">
+                                        <div class="progress-bar {% if fpr.rate >= 50 %}bg-success{% elif fpr.rate >= 30 %}bg-warning{% else %}bg-danger{% endif %}" style="width:{{ fpr.rate }}%">{{ fpr.rate }}%</div>
+                                    </div>
+                                </td>
+                                <td>{{ fpr.total }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="p-3 text-muted">No exam results yet.</div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
 <div class="row g-3">
     <div class="col-12">
         <div class="card">

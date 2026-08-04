@@ -287,18 +287,26 @@ def ensure_fee_account(student, term=None, amount_paid=0.0):
     return fee_account
 
 
-def compute_pass_rates(term, campus_id=None):
+def compute_pass_rates(term, campus_id=None, subject_id=None):
     """Compute per-subject and per-form pass rates with 3 queries total.
 
     Previously this looped over every subject and every form, firing one query
     per iteration (the classic N+1 pattern on the dashboards). Scoped to a
-    single campus; None means all campuses (super_admin).
+    single campus; None means all campuses (super_admin). Pass subject_id to
+    scope to a single subject (teacher dashboard).
     """
     if campus_id is None:
         campus_id = getattr(g, 'current_campus_id', None)
-    subjects = Subject.query.filter_by(campus_id=campus_id).all() if campus_id else Subject.query.all()
-    exams = (ExamMark.query.filter_by(term=term, campus_id=campus_id).all() if campus_id
-             else ExamMark.query.filter_by(term=term).all())
+    if subject_id:
+        subjects = Subject.query.filter_by(id=subject_id).all()
+        exam_q = ExamMark.query.filter_by(term=term, subject_id=subject_id)
+        if campus_id:
+            exam_q = exam_q.filter_by(campus_id=campus_id)
+        exams = exam_q.all()
+    else:
+        subjects = Subject.query.filter_by(campus_id=campus_id).all() if campus_id else Subject.query.all()
+        exams = (ExamMark.query.filter_by(term=term, campus_id=campus_id).all() if campus_id
+                 else ExamMark.query.filter_by(term=term).all())
 
     by_subject = {}
     for e in exams:
@@ -309,7 +317,8 @@ def compute_pass_rates(term, campus_id=None):
         group = by_subject.get(subj.id)
         if group:
             passed = sum(1 for e in group if e.total_marks > 0 and e.marks / e.total_marks * 100 >= 50)
-            pass_rates.append({'subject': subj.name, 'rate': round(passed / len(group) * 100, 1), 'total': len(group)})
+            pass_rates.append({'subject': subj.name, 'rate': round(passed / len(group) * 100, 1),
+                               'passed': passed, 'total': len(group)})
 
     students = Student.query.filter_by(campus_id=campus_id).all() if campus_id else Student.query.all()
     student_form = {s.id: s.form for s in students}
@@ -324,7 +333,8 @@ def compute_pass_rates(term, campus_id=None):
         group = by_form.get(f)
         if group:
             passed = sum(1 for e in group if e.total_marks > 0 and e.marks / e.total_marks * 100 >= 50)
-            form_pass_rates.append({'form': f, 'rate': round(passed / len(group) * 100, 1), 'total': len(group)})
+            form_pass_rates.append({'form': f, 'rate': round(passed / len(group) * 100, 1),
+                                    'passed': passed, 'total': len(group)})
 
     return pass_rates, form_pass_rates
 
@@ -818,6 +828,13 @@ def staff_dashboard():
         stats['student_count'] = StudentSubject.query.filter_by(subject_id=current_user.subject_id).count() if current_user.subject_id else 0
         stats['activities_count'] = scoped(Activity).count()
         stats['recent_activity_posts'] = scoped(Activity).order_by(Activity.created_at.desc()).limit(10).all()
+        term = 'Term 1'
+        stats['term'] = term
+        if current_user.subject_id:
+            stats['teacher_pass_rates'], stats['teacher_form_pass_rates'] = compute_pass_rates(
+                term, campus_id=current_user.campus_id, subject_id=current_user.subject_id)
+        else:
+            stats['teacher_pass_rates'], stats['teacher_form_pass_rates'] = [], []
     elif current_user.role == 'cashier':
         stats['pending_clearance'] = scoped(Payment).filter_by(cleared=False).count()
         stats['total_payments_today'] = scoped(Payment).filter(db.func.date(Payment.created_at) == date.today()).count()
@@ -2112,8 +2129,23 @@ def super_admin_dashboard():
     total_students = Student.query.count()
     total_staff = User.query.filter(User.role != 'super_admin').count()
     total_payments = db.session.query(db.func.sum(Payment.amount)).filter(Payment.cleared == True).scalar() or 0
+    term = 'Term 1'
+    pass_rates, form_pass_rates = compute_pass_rates(term)
+    campus_pass_rates = []
+    for c in campuses:
+        cr, _ = compute_pass_rates(term, campus_id=c.id)
+        total = sum(x['total'] for x in cr)
+        if total:
+            passed = sum(x['passed'] for x in cr)
+            campus_pass_rates.append({'campus': c.name, 'rate': round(passed / total * 100, 1), 'total': total})
+    overall_total = sum(x['total'] for x in pass_rates)
+    overall_passed = sum(x['passed'] for x in pass_rates)
+    overall_rate = round(overall_passed / overall_total * 100, 1) if overall_total else 0
     return render_template('super_admin/dashboard.html', campuses=campuses, total_campuses=total_campuses,
-                           total_students=total_students, total_staff=total_staff, total_payments=total_payments)
+                           total_students=total_students, total_staff=total_staff, total_payments=total_payments,
+                           term=term, pass_rates=pass_rates, form_pass_rates=form_pass_rates,
+                           campus_pass_rates=campus_pass_rates, overall_rate=overall_rate,
+                           overall_total=overall_total)
 
 
 @app.route('/super-admin/campuses')
