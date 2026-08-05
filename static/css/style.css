@@ -162,7 +162,7 @@ a.stat-link .stat-card {
 /* ===== AUTH / LOGIN (two-column portal) ===== */
 
 .auth-body {
-    background: linear-gradient(135deg, var(--primary-dark) 0%, var(--primary) 55%, var(--primary-light) 120%);
+    background: #FFFFFF;
     min-height: 100vh;
     display: flex;
     align-items: center;
@@ -176,7 +176,7 @@ a.stat-link .stat-card {
     width: 100%;
     border-radius: 18px;
     overflow: hidden;
-    box-shadow: 0 15px 45px rgba(0, 0, 0, 0.35);
+    box-shadow: 0 12px 35px rgba(0, 0, 0, 0.12);
     background: var(--white);
 }
 
