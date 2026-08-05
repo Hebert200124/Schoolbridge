@@ -532,3 +532,23 @@ a:hover {
 
     .btn, .btn-sm { min-height: 44px; }
 }
+
+/* ===== STUDENT PROFILE RESPONSIVE ===== */
+
+@media (max-width: 767.98px) {
+    .stat-sidebar {
+        display: flex;
+        flex-direction: column;
+        gap: 0.6rem;
+        margin-bottom: 1rem;
+    }
+    .stat-sidebar .stat-card { margin-bottom: 0; }
+}
+
+@media (max-width: 767.98px) {
+    .table-profile th { white-space: normal; }
+}
+
+@media (max-width: 576px) {
+    .stat-sidebar .stat-card { padding: 0.85rem 1rem; }
+}
