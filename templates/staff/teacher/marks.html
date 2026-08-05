@@ -42,7 +42,7 @@
                             {% for mt in s_monthly %}
                                 {% if loop.index == 1 %}
                                     {{ mt.marks }}/{{ mt.total_marks }}
-                                    <span class="grade-{{ mt.grade(subject.level) }}">{{ mt.grade(subject.level) }}</span>
+                                    <span class="grade-{{ 'a' if subject.level == 'A' else 'o' }}-{{ mt.grade(subject.level) }}">{{ mt.grade(subject.level) }}</span>
                                     <button class="btn btn-sm btn-outline-primary edit-mark-btn" data-id="{{ mt.id }}" data-type="monthly" data-marks="{{ mt.marks }}" data-total="{{ mt.total_marks }}" data-comment="{{ mt.comment or '' }}"><i class="bi bi-pencil"></i></button>
                                     <a href="{{ url_for('teacher_delete_mark', mark_id=mt.id, mark_type='monthly') }}" class="btn btn-sm btn-outline-danger" onclick="return confirm('Delete?')"><i class="bi bi-trash"></i></a>
                                 {% endif %}
@@ -52,7 +52,7 @@
                             {% for mt in s_monthly %}
                                 {% if loop.index == 2 %}
                                     {{ mt.marks }}/{{ mt.total_marks }}
-                                    <span class="grade-{{ mt.grade(subject.level) }}">{{ mt.grade(subject.level) }}</span>
+                                    <span class="grade-{{ 'a' if subject.level == 'A' else 'o' }}-{{ mt.grade(subject.level) }}">{{ mt.grade(subject.level) }}</span>
                                     <button class="btn btn-sm btn-outline-primary edit-mark-btn" data-id="{{ mt.id }}" data-type="monthly" data-marks="{{ mt.marks }}" data-total="{{ mt.total_marks }}" data-comment="{{ mt.comment or '' }}"><i class="bi bi-pencil"></i></button>
                                     <a href="{{ url_for('teacher_delete_mark', mark_id=mt.id, mark_type='monthly') }}" class="btn btn-sm btn-outline-danger" onclick="return confirm('Delete?')"><i class="bi bi-trash"></i></a>
                                 {% endif %}
@@ -62,7 +62,7 @@
                             {% for mt in s_monthly %}
                                 {% if loop.index == 3 %}
                                     {{ mt.marks }}/{{ mt.total_marks }}
-                                    <span class="grade-{{ mt.grade(subject.level) }}">{{ mt.grade(subject.level) }}</span>
+                                    <span class="grade-{{ 'a' if subject.level == 'A' else 'o' }}-{{ mt.grade(subject.level) }}">{{ mt.grade(subject.level) }}</span>
                                     <button class="btn btn-sm btn-outline-primary edit-mark-btn" data-id="{{ mt.id }}" data-type="monthly" data-marks="{{ mt.marks }}" data-total="{{ mt.total_marks }}" data-comment="{{ mt.comment or '' }}"><i class="bi bi-pencil"></i></button>
                                     <a href="{{ url_for('teacher_delete_mark', mark_id=mt.id, mark_type='monthly') }}" class="btn btn-sm btn-outline-danger" onclick="return confirm('Delete?')"><i class="bi bi-trash"></i></a>
                                 {% endif %}
@@ -72,7 +72,7 @@
                             {% for em in s_exam %}
                                 {% if 'Mid' in em.exam_type %}
                                     {{ em.marks }}/{{ em.total_marks }}
-                                    <span class="grade-{{ em.grade(subject.level) }}">{{ em.grade(subject.level) }}</span>
+                                    <span class="grade-{{ 'a' if subject.level == 'A' else 'o' }}-{{ em.grade(subject.level) }}">{{ em.grade(subject.level) }}</span>
                                     <button class="btn btn-sm btn-outline-primary edit-mark-btn" data-id="{{ em.id }}" data-type="exam" data-marks="{{ em.marks }}" data-total="{{ em.total_marks }}" data-comment="{{ em.comment or '' }}"><i class="bi bi-pencil"></i></button>
                                     <a href="{{ url_for('teacher_delete_mark', mark_id=em.id, mark_type='exam') }}" class="btn btn-sm btn-outline-danger" onclick="return confirm('Delete?')"><i class="bi bi-trash"></i></a>
                                 {% endif %}
@@ -82,7 +82,7 @@
                             {% for em in s_exam %}
                                 {% if 'End' in em.exam_type or 'Final' in em.exam_type %}
                                     {{ em.marks }}/{{ em.total_marks }}
-                                    <span class="grade-{{ em.grade(subject.level) }}">{{ em.grade(subject.level) }}</span>
+                                    <span class="grade-{{ 'a' if subject.level == 'A' else 'o' }}-{{ em.grade(subject.level) }}">{{ em.grade(subject.level) }}</span>
                                     <button class="btn btn-sm btn-outline-primary edit-mark-btn" data-id="{{ em.id }}" data-type="exam" data-marks="{{ em.marks }}" data-total="{{ em.total_marks }}" data-comment="{{ em.comment or '' }}"><i class="bi bi-pencil"></i></button>
                                     <a href="{{ url_for('teacher_delete_mark', mark_id=em.id, mark_type='exam') }}" class="btn btn-sm btn-outline-danger" onclick="return confirm('Delete?')"><i class="bi bi-trash"></i></a>
                                 {% endif %}

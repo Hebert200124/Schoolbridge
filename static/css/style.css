@@ -405,12 +405,16 @@ a:hover {
     border-radius: 0;
 }
 
-.grade-A { color: var(--success); font-weight: bold; }
-.grade-B { color: #43a047; font-weight: bold; }
-.grade-C { color: #6B8A9E; font-weight: bold; }
-.grade-D { color: #54738A; font-weight: bold; }
-.grade-E { color: #3D5C73; font-weight: bold; }
-.grade-U, .grade-O, .grade-F { color: var(--danger); font-weight: bold; }
+/* ===== GRADES (ZIMSEC) ===== */
+.grade-A, .grade-B, .grade-C, .grade-D, .grade-E, .grade-U, .grade-O, .grade-F { font-weight: bold; }
+
+/* O-Level: A, B, C = pass (green); D, E, U = fail (red) */
+.grade-o-A, .grade-o-B, .grade-o-C { color: var(--success); }
+.grade-o-D, .grade-o-E, .grade-o-U { color: var(--danger); }
+
+/* A-Level: A-E = pass (green); O, F = fail (red) */
+.grade-a-A, .grade-a-B, .grade-a-C, .grade-a-D, .grade-a-E { color: var(--success); }
+.grade-a-O, .grade-a-F { color: var(--danger); }
 
 .page-header {
     border-bottom: 3px solid var(--accent);

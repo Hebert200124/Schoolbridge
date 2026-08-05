@@ -27,7 +27,7 @@
                         <tr>
                             <td>{{ mt.academic_year }}</td><td>{{ mt.term }}</td><td>{{ mt.month }}</td>
                             <td>{{ mt.marks }}/{{ mt.total_marks }}</td>
-                            <td><span class="grade-{{ mt.grade(level) }}">{{ mt.grade(level) }}</span></td>
+                            <td><span class="grade-{{ 'a' if level == 'A' else 'o' }}-{{ mt.grade(level) }}">{{ mt.grade(level) }}</span></td>
                             <td><small class="text-muted">{{ mt.comment or '-' }}</small></td>
                         </tr>
                         {% else %}
@@ -47,7 +47,7 @@
                         <tr>
                             <td>{{ em.academic_year }}</td><td>{{ em.term }}</td><td>{{ em.exam_type }}</td>
                             <td>{{ em.marks }}/{{ em.total_marks }}</td>
-                            <td><span class="grade-{{ em.grade(level) }}">{{ em.grade(level) }}</span></td>
+                            <td><span class="grade-{{ 'a' if level == 'A' else 'o' }}-{{ em.grade(level) }}">{{ em.grade(level) }}</span></td>
                             <td><small class="text-muted">{{ em.comment or '-' }}</small></td>
                         </tr>
                         {% else %}

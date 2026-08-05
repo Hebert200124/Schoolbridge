@@ -74,7 +74,7 @@
                             <td>{{ mt.term }}</td><td>{{ mt.month }}</td>
                             <td>{{ mt.marks }}/{{ mt.total_marks }}</td>
                             <td>{{ pct }}%</td>
-                            <td><span class="grade-{{ mt.grade(data.level) }} fs-5">{{ mt.grade(data.level) }}</span></td>
+                            <td><span class="grade-{{ 'a' if data.level == 'A' else 'o' }}-{{ mt.grade(data.level) }} fs-5">{{ mt.grade(data.level) }}</span></td>
                             <td><small class="text-muted">{{ mt.comment or '-' }}</small></td>
                         </tr>
                         {% endfor %}
@@ -94,7 +94,7 @@
                             <td>{{ em.term }}</td><td>{{ em.exam_type }}</td>
                             <td>{{ em.marks }}/{{ em.total_marks }}</td>
                             <td>{{ pct }}%</td>
-                            <td><span class="grade-{{ em.grade(data.level) }} fs-5">{{ em.grade(data.level) }}</span></td>
+                            <td><span class="grade-{{ 'a' if data.level == 'A' else 'o' }}-{{ em.grade(data.level) }} fs-5">{{ em.grade(data.level) }}</span></td>
                             <td><small class="text-muted">{{ em.comment or '-' }}</small></td>
                         </tr>
                         {% endfor %}
@@ -117,7 +117,7 @@
                         <tr>
                             <td>{{ mt.academic_year }}</td><td>{{ mt.term }}</td><td>{{ mt.month }}</td>
                             <td>{{ mt.marks }}/{{ mt.total_marks }}</td>
-                            <td><span class="grade-{{ mt.grade(data.level) }}">{{ mt.grade(data.level) }}</span></td>
+                            <td><span class="grade-{{ 'a' if data.level == 'A' else 'o' }}-{{ mt.grade(data.level) }}">{{ mt.grade(data.level) }}</span></td>
                             <td><small class="text-muted">{{ mt.comment or '-' }}</small></td>
                         </tr>
                         {% endfor %}
@@ -134,7 +134,7 @@
                         <tr>
                             <td>{{ em.academic_year }}</td><td>{{ em.term }}</td><td>{{ em.exam_type }}</td>
                             <td>{{ em.marks }}/{{ em.total_marks }}</td>
-                            <td><span class="grade-{{ em.grade(data.level) }}">{{ em.grade(data.level) }}</span></td>
+                            <td><span class="grade-{{ 'a' if data.level == 'A' else 'o' }}-{{ em.grade(data.level) }}">{{ em.grade(data.level) }}</span></td>
                             <td><small class="text-muted">{{ em.comment or '-' }}</small></td>
                         </tr>
                         {% endfor %}
@@ -170,12 +170,12 @@
                 <h6>Ordinary Level (O-Level)</h6>
                 <div class="table-responsive">
                 <table class="table table-sm table-bordered" style="max-width: 300px;">
-                    <tr><td><span class="grade-A">A</span></td><td>70-100%</td><td>Excellent</td></tr>
-                    <tr><td><span class="grade-B">B</span></td><td>60-69%</td><td>Very Good</td></tr>
-                    <tr><td><span class="grade-C">C</span></td><td>50-59%</td><td>Good</td></tr>
-                    <tr><td><span class="grade-D">D</span></td><td>45-49%</td><td>Pass</td></tr>
-                    <tr><td><span class="grade-E">E</span></td><td>40-44%</td><td>Marginal</td></tr>
-                    <tr><td><span class="grade-U">U</span></td><td>0-39%</td><td>Ungraded</td></tr>
+                    <tr><td><span class="grade-o-A">A</span></td><td>70-100%</td><td>Excellent</td></tr>
+                    <tr><td><span class="grade-o-B">B</span></td><td>60-69%</td><td>Very Good</td></tr>
+                    <tr><td><span class="grade-o-C">C</span></td><td>50-59%</td><td>Good</td></tr>
+                    <tr><td><span class="grade-o-D">D</span></td><td>45-49%</td><td>Pass</td></tr>
+                    <tr><td><span class="grade-o-E">E</span></td><td>40-44%</td><td>Marginal</td></tr>
+                    <tr><td><span class="grade-o-U">U</span></td><td>0-39%</td><td>Ungraded</td></tr>
                 </table>
                 </div>
             </div>
@@ -183,13 +183,13 @@
                 <h6>Advanced Level (A-Level)</h6>
                 <div class="table-responsive">
                 <table class="table table-sm table-bordered" style="max-width: 300px;">
-                    <tr><td><span class="grade-A">A</span></td><td>70-100%</td><td>Excellent (5 pts)</td></tr>
-                    <tr><td><span class="grade-B">B</span></td><td>60-69%</td><td>Very Good (4 pts)</td></tr>
-                    <tr><td><span class="grade-C">C</span></td><td>50-59%</td><td>Good (3 pts)</td></tr>
-                    <tr><td><span class="grade-D">D</span></td><td>45-49%</td><td>Pass (2 pts)</td></tr>
-                    <tr><td><span class="grade-E">E</span></td><td>40-44%</td><td>Marginal (1 pt)</td></tr>
-                    <tr><td><span class="grade-O">O</span></td><td>35-39%</td><td>Ordinary Pass (0 pts)</td></tr>
-                    <tr><td><span class="grade-F">F</span></td><td>0-34%</td><td>Fail (0 pts)</td></tr>
+                    <tr><td><span class="grade-a-A">A</span></td><td>70-100%</td><td>Excellent (5 pts)</td></tr>
+                    <tr><td><span class="grade-a-B">B</span></td><td>60-69%</td><td>Very Good (4 pts)</td></tr>
+                    <tr><td><span class="grade-a-C">C</span></td><td>50-59%</td><td>Good (3 pts)</td></tr>
+                    <tr><td><span class="grade-a-D">D</span></td><td>45-49%</td><td>Pass (2 pts)</td></tr>
+                    <tr><td><span class="grade-a-E">E</span></td><td>40-44%</td><td>Marginal (1 pt)</td></tr>
+                    <tr><td><span class="grade-a-O">O</span></td><td>35-39%</td><td>Ordinary Pass (0 pts)</td></tr>
+                    <tr><td><span class="grade-a-F">F</span></td><td>0-34%</td><td>Fail (0 pts)</td></tr>
                 </table>
                 </div>
             </div>
