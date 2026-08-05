@@ -937,8 +937,8 @@ def teacher_marks():
     subject = scoped_get_or_404(Subject, current_user.subject_id)
     student_subjects = StudentSubject.query.filter_by(subject_id=current_user.subject_id).all()
     students = [ss.student for ss in student_subjects if ss.student.is_active and ss.student.campus_id == current_user.campus_id]
-    monthly_tests = MonthlyTest.query.filter_by(subject_id=current_user.subject_id).all()
-    exam_marks_list = ExamMark.query.filter_by(subject_id=current_user.subject_id).all()
+    monthly_tests = MonthlyTest.query.filter_by(subject_id=current_user.subject_id).order_by(MonthlyTest.id).all()
+    exam_marks_list = ExamMark.query.filter_by(subject_id=current_user.subject_id).order_by(ExamMark.id).all()
 
     marks_data = {}
     for s in students:
@@ -946,7 +946,17 @@ def teacher_marks():
         s_exam = [em for em in exam_marks_list if em.student_id == s.id]
         marks_data[s.id] = {'monthly': s_monthly, 'exam': s_exam}
 
-    return render_template('staff/teacher/marks.html', subject=subject, students=students, marks_data=marks_data)
+    # Database-driven assessment columns: only show columns for assessments that have marks entered
+    max_monthly = max((len(md['monthly']) for md in marks_data.values()), default=0)
+    assessment_columns = []
+    for pos in range(1, max_monthly + 1):
+        assessment_columns.append({'type': 'monthly', 'pos': pos, 'label': 'Monthly %d' % pos})
+    if any('Mid' in em.exam_type for em in exam_marks_list):
+        assessment_columns.append({'type': 'exam', 'kind': 'Mid', 'label': 'Mid-Term'})
+    if any('End' in em.exam_type or 'Final' in em.exam_type for em in exam_marks_list):
+        assessment_columns.append({'type': 'exam', 'kind': 'End', 'label': 'End-Term'})
+
+    return render_template('staff/teacher/marks.html', subject=subject, students=students, marks_data=marks_data, assessment_columns=assessment_columns)
 
 
 @app.route('/staff/teacher/marks/add', methods=['POST'])
