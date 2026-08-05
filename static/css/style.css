@@ -476,10 +476,24 @@ a:hover {
     .btn-sm { padding: 0.45rem 0.75rem; font-size: 0.85rem; min-height: 38px; }
     a.nav-link, .dropdown-item, .btn { min-height: 44px; display: inline-flex; align-items: center; }
 
-    .auth-card { flex-direction: column; }
-    .auth-sidebar { padding: 2rem 1.5rem; }
-    .auth-logo { width: 72px; height: 72px; font-size: 2.4rem; }
-    .auth-main { padding: 2rem 1.5rem; }
+    .auth-card { flex-direction: row; border-radius: 12px; }
+    .auth-sidebar { flex: 1 1 38%; min-width: 0; padding: 1.25rem 1rem; }
+    .auth-brand { margin-bottom: 1rem; }
+    .auth-logo { width: 52px; height: 52px; font-size: 1.7rem; margin-bottom: 0.5rem; }
+    .auth-brand h1 { font-size: 1.1rem; }
+    .auth-tagline { font-size: 0.72rem; }
+    .auth-about { margin-bottom: 0.75rem; }
+    .auth-about h5 { font-size: 0.8rem; padding-bottom: 0.35rem; }
+    .auth-about p { font-size: 0.72rem; }
+    .auth-about ul { font-size: 0.7rem; padding-left: 0.9rem; }
+    .auth-about li { margin-bottom: 0.25rem; }
+    .auth-announcement { padding: 0.6rem; border-left-width: 3px; }
+    .auth-announcement h6 { font-size: 0.74rem; }
+    .auth-announcement p { font-size: 0.7rem; }
+    .auth-main { flex: 1 1 62%; min-width: 0; padding: 1.25rem 1rem; }
+    .auth-header { margin-bottom: 1.25rem; }
+    .auth-header h3 { font-size: 1.2rem; }
+    .auth-header p { font-size: 0.8rem; }
 
     .modal-dialog { margin: 0.5rem; }
     .modal-body { padding: 1rem; }
@@ -505,6 +519,14 @@ a:hover {
     .card-header h5, .card-header h6 { font-size: 0.85rem; }
     .page-header { flex-direction: column; align-items: flex-start !important; gap: 0.5rem; }
     .page-header .btn { width: 100%; justify-content: center; }
+
+    .auth-body { padding: 0.75rem 0.5rem; }
+    .auth-sidebar { padding: 1rem 0.75rem; }
+    .auth-main { padding: 1rem 0.75rem; }
+    .auth-logo { width: 44px; height: 44px; font-size: 1.4rem; }
+    .auth-brand h1 { font-size: 0.95rem; }
+    .auth-announcement h6 { font-size: 0.7rem; }
+    .auth-announcement p { font-size: 0.66rem; }
 
     .row.g-3 > [class*="col-"] { padding-bottom: 0.5rem; }
 
