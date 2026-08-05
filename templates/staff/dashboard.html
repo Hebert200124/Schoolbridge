@@ -281,7 +281,9 @@
         </div>
     </div>
 </div>
+{% endif %}
 
+{% if current_user.role in ('principal', 'admin') %}
 <div class="row g-3 mb-4">
     <div class="col-md-6">
         <div class="card">
@@ -308,8 +310,9 @@
             </div>
         </div>
     </div>
-    {% endif %}
-
+{% else %}
+<div class="row g-3 mb-4">
+{% endif %}
     <div class="col-md-6">
         <div class="card">
             <div class="card-header"><h6 class="mb-0"><i class="bi bi-megaphone"></i> Announcements &amp; Activities</h6></div>
