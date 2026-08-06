@@ -7,6 +7,7 @@ from datetime import datetime, date, timedelta
 import os
 import re
 import random
+import secrets
 import string
 import traceback
 import sib_api_v3_sdk
@@ -221,7 +222,7 @@ login_manager.login_message_category = 'info'
 
 @app.context_processor
 def inject_now():
-    return {'now': datetime.now}
+    return {'now': datetime.now, 'csrf_token': _csrf_token}
 
 
 def generate_student_id():
@@ -467,6 +468,24 @@ def get_selected_campus_id():
     return getattr(current_user, 'campus_id', None)
 
 
+def _csrf_token():
+    if '_csrf_token' not in session:
+        session['_csrf_token'] = secrets.token_hex(16)
+    return session['_csrf_token']
+
+
+def _check_csrf():
+    """Reject POSTs that do not carry the session's CSRF token.
+
+    Used on the destructive routes (deletes, toggles, clears) so they cannot
+    be triggered cross-site or by a forged request.
+    """
+    token = session.get('_csrf_token')
+    submitted = request.form.get('_csrf_token', '')
+    if not token or not submitted or not secrets.compare_digest(token, submitted):
+        abort(400, 'Invalid or missing CSRF token')
+
+
 # ============ AUTH ROUTES ============
 
 @app.route('/')
@@ -621,9 +640,10 @@ def find_person_by_reg(reg_raw):
     candidates += list(User.query.filter(User.username.in_(variants)).all())
     seen = set()
     for p in candidates:
-        if p.id in seen:
+        key = (type(p).__name__, p.id)
+        if key in seen:
             continue
-        seen.add(p.id)
+        seen.add(key)
         return p
     return None
 
@@ -679,7 +699,7 @@ def auth_reset_email():
         email_clean = (person.email or '').strip().lower()
 
         latest = OTPCode.query.filter_by(
-            user_type=user_type, user_id=user_id, used=False
+            user_type=user_type, user_id=user_id
         ).order_by(OTPCode.created_at.desc()).first()
 
         if latest and latest.is_rate_limited():
@@ -691,7 +711,7 @@ def auth_reset_email():
             flash('Please wait at least 1 minute before requesting a new OTP.', 'warning')
             return redirect(url_for('auth_reset_email'))
 
-        code = f'{random.randint(0, 999999):06d}'
+        code = f'{secrets.randbelow(1000000):06d}'
         now = datetime.utcnow()
 
         if latest:
@@ -850,6 +870,7 @@ def staff_dashboard():
         stats['total_students'] = scoped(Student).count()
         stats['active_students'] = scoped(Student).filter_by(is_active=True).count()
         stats['staff_count'] = scoped(User).filter(User.role.notin_(['principal', 'super_admin'])).count()
+        stats['total_staff'] = stats['staff_count']
         term = 'Term 1'
         stats['term'] = term
         cid = current_user.campus_id
@@ -895,6 +916,7 @@ def staff_dashboard():
 
 @app.route('/staff/activities')
 @login_required
+@role_required('admin', 'teacher', 'cashier', 'principal')
 def staff_activities():
     activities = scoped(ActivityLog).order_by(ActivityLog.created_at.desc()).all()
     return render_template('staff/activities.html', activities=activities)
@@ -940,8 +962,19 @@ def teacher_marks():
     subject = scoped_get_or_404(Subject, current_user.subject_id)
     student_subjects = StudentSubject.query.filter_by(subject_id=current_user.subject_id).all()
     students = [ss.student for ss in student_subjects if ss.student.is_active and ss.student.campus_id == current_user.campus_id]
-    monthly_tests = MonthlyTest.query.filter_by(subject_id=current_user.subject_id).order_by(MonthlyTest.id).all()
-    exam_marks_list = ExamMark.query.filter_by(subject_id=current_user.subject_id).order_by(ExamMark.id).all()
+    visible_ids = [s.id for s in students]
+    # Marks are scoped to the teacher's campus AND to the students shown on this
+    # page, so phantom empty columns from other campuses/inactive students cannot appear.
+    monthly_tests = MonthlyTest.query.filter(
+        MonthlyTest.subject_id == current_user.subject_id,
+        MonthlyTest.campus_id == current_user.campus_id,
+        MonthlyTest.student_id.in_(visible_ids)
+    ).order_by(MonthlyTest.id).all() if visible_ids else []
+    exam_marks_list = ExamMark.query.filter(
+        ExamMark.subject_id == current_user.subject_id,
+        ExamMark.campus_id == current_user.campus_id,
+        ExamMark.student_id.in_(visible_ids)
+    ).order_by(ExamMark.id).all() if visible_ids else []
 
     # Key helpers map each column to the exact stored assessment
     def monthly_key(mt):
@@ -1002,17 +1035,40 @@ def teacher_marks():
 def teacher_add_mark():
     student_id = request.form.get('student_id')
     mark_type = request.form.get('mark_type')
-    term = request.form.get('term')
-    month = request.form.get('month')
-    exam_type = request.form.get('exam_type')
-    marks = float(request.form.get('marks'))
-    total_marks = float(request.form.get('total_marks', 100))
-    academic_year = request.form.get('academic_year', str(datetime.now().year))
+    term = (request.form.get('term') or '').strip()
+    month = (request.form.get('month') or '').strip()
+    exam_type = (request.form.get('exam_type') or '').strip()
+    academic_year = (request.form.get('academic_year') or '').strip() or str(datetime.now().year)
     comment = request.form.get('comment')
+
+    try:
+        marks = float(request.form.get('marks'))
+        total_marks = float(request.form.get('total_marks', 100))
+    except (TypeError, ValueError):
+        flash('Marks must be valid numbers.', 'danger')
+        return redirect(url_for('teacher_marks'))
+    if total_marks <= 0 or marks < 0:
+        flash('Marks must be zero or more and the total must be greater than zero.', 'danger')
+        return redirect(url_for('teacher_marks'))
+    if mark_type not in ('monthly', 'exam'):
+        flash('Invalid mark type.', 'danger')
+        return redirect(url_for('teacher_marks'))
+    if mark_type == 'monthly' and not (term and month):
+        flash('Term and month are required for a monthly test.', 'danger')
+        return redirect(url_for('teacher_marks'))
+    if mark_type == 'exam' and not exam_type:
+        flash('Exam type is required for an exam mark.', 'danger')
+        return redirect(url_for('teacher_marks'))
 
     student = scoped(Student).filter_by(id=student_id).first()
     if not student:
         flash('Student not found.', 'danger')
+        return redirect(url_for('teacher_marks'))
+
+    enrolled = (current_user.subject_id and StudentSubject.query.filter_by(
+        student_id=student.id, subject_id=current_user.subject_id).first())
+    if not enrolled:
+        flash('This student is not enrolled in your subject.', 'danger')
         return redirect(url_for('teacher_marks'))
 
     if mark_type == 'monthly':
@@ -1024,7 +1080,7 @@ def teacher_add_mark():
             comment=comment or None
         )
         db.session.add(test)
-    elif mark_type == 'exam':
+    else:
         exam = ExamMark(
             student_id=student.id, subject_id=current_user.subject_id,
             campus_id=current_user.campus_id,
@@ -1045,49 +1101,52 @@ def teacher_add_mark():
 @role_required('teacher')
 def teacher_edit_mark(mark_id):
     mark_type = request.form.get('mark_type')
-    marks = float(request.form.get('marks'))
-    total_marks = float(request.form.get('total_marks', 100))
+    if mark_type not in ('monthly', 'exam'):
+        flash('Invalid mark type.', 'danger')
+        return redirect(url_for('teacher_marks'))
+    try:
+        marks = float(request.form.get('marks'))
+        total_marks = float(request.form.get('total_marks', 100))
+    except (TypeError, ValueError):
+        flash('Marks must be valid numbers.', 'danger')
+        return redirect(url_for('teacher_marks'))
+    if total_marks <= 0 or marks < 0:
+        flash('Marks must be zero or more and the total must be greater than zero.', 'danger')
+        return redirect(url_for('teacher_marks'))
     comment = request.form.get('comment')
 
     if mark_type == 'monthly':
         mark = scoped_get_or_404(MonthlyTest, mark_id)
-        if mark.subject_id != current_user.subject_id:
-            flash('Access denied.', 'danger')
-            return redirect(url_for('teacher_marks'))
-        mark.marks = marks
-        mark.total_marks = total_marks
-        mark.comment = comment or None
-    elif mark_type == 'exam':
+    else:
         mark = scoped_get_or_404(ExamMark, mark_id)
-        if mark.subject_id != current_user.subject_id:
-            flash('Access denied.', 'danger')
-            return redirect(url_for('teacher_marks'))
-        mark.marks = marks
-        mark.total_marks = total_marks
-        mark.comment = comment or None
+    if mark.subject_id != current_user.subject_id or mark.teacher_id != current_user.id:
+        flash('Access denied.', 'danger')
+        return redirect(url_for('teacher_marks'))
+    mark.marks = marks
+    mark.total_marks = total_marks
+    mark.comment = comment or None
 
     db.session.commit()
     flash('Marks updated!', 'success')
     return redirect(url_for('teacher_marks'))
 
 
-@app.route('/staff/teacher/marks/delete/<int:mark_id>/<mark_type>')
+@app.route('/staff/teacher/marks/delete/<int:mark_id>/<mark_type>', methods=['POST'])
 @login_required
 @role_required('teacher')
 def teacher_delete_mark(mark_id, mark_type):
+    _check_csrf()
+    if mark_type not in ('monthly', 'exam'):
+        flash('Invalid mark type.', 'danger')
+        return redirect(url_for('teacher_marks'))
     if mark_type == 'monthly':
         mark = scoped_get_or_404(MonthlyTest, mark_id)
-        if mark.teacher_id != current_user.id:
-            flash('Access denied.', 'danger')
-            return redirect(url_for('teacher_marks'))
-        db.session.delete(mark)
-    elif mark_type == 'exam':
+    else:
         mark = scoped_get_or_404(ExamMark, mark_id)
-        if mark.teacher_id != current_user.id:
-            flash('Access denied.', 'danger')
-            return redirect(url_for('teacher_marks'))
-        db.session.delete(mark)
-
+    if mark.teacher_id != current_user.id:
+        flash('Access denied.', 'danger')
+        return redirect(url_for('teacher_marks'))
+    db.session.delete(mark)
     db.session.commit()
     flash('Mark deleted.', 'success')
     return redirect(url_for('teacher_marks'))
@@ -1098,10 +1157,13 @@ def teacher_delete_mark(mark_id, mark_type):
 @role_required('teacher')
 def teacher_save_remark():
     student_id = request.form.get('student_id')
-    remark = request.form.get('remark')
+    remark = (request.form.get('remark') or '').strip()
     student = scoped(Student).filter_by(id=student_id).first()
     if not student:
         flash('Student not found.', 'danger')
+        return redirect(url_for('teacher_class'))
+    if not remark:
+        flash('Remark cannot be empty.', 'danger')
         return redirect(url_for('teacher_class'))
 
     tr = TeacherRemark(student_id=student.id, teacher_id=current_user.id, remark=remark, campus_id=current_user.campus_id)
@@ -1117,10 +1179,19 @@ def teacher_save_remark():
 @login_required
 @role_required('cashier')
 def cashier_dashboard():
+    term = get_current_term()
     recent_payments = scoped(Payment).order_by(Payment.created_at.desc()).options(joinedload(Payment.student), joinedload(Payment.cashier)).limit(20).all()
     pending = scoped(Payment).filter_by(cleared=False).count()
+    cleared_count = scoped(Payment).filter_by(cleared=True).count()
     all_students = scoped(Student).order_by(Student.student_id).all()
-    return render_template('staff/cashier/dashboard.html', payments=recent_payments, pending=pending, all_students=all_students)
+    # Current-term fee account per student, so the table never relies on the
+    # uselist=False lazy relationship (which crashes when a student has accounts
+    # for more than one term).
+    fee_map = {}
+    for fa in FeeAccount.query.filter_by(campus_id=current_user.campus_id, term=term).all():
+        fee_map.setdefault(fa.student_id, fa)
+    return render_template('staff/cashier/dashboard.html', payments=recent_payments, pending=pending,
+                           cleared_count=cleared_count, all_students=all_students, fee_map=fee_map)
 
 
 @app.route('/staff/cashier/student/fees', methods=['GET', 'POST'])
@@ -1134,11 +1205,16 @@ def cashier_student_fees():
 
     if request.method == 'POST':
         student_id = request.form.get('student_id')
+    else:
+        student_id = request.args.get('sid')
+
+    if student_id:
         student = scoped(Student).filter_by(student_id=student_id).first()
         if not student:
             flash('Student not found.', 'danger')
         else:
-            fee_account = FeeAccount.query.filter_by(student_id=student.id, campus_id=current_user.campus_id).first()
+            fee_account = FeeAccount.query.filter_by(student_id=student.id, term=get_current_term(),
+                                                    campus_id=current_user.campus_id).first()
             payments = Payment.query.filter_by(student_id=student.id, campus_id=current_user.campus_id).order_by(Payment.created_at.desc()).all()
             detected_fee = get_detected_fee(student)
 
@@ -1151,7 +1227,14 @@ def cashier_student_fees():
 @role_required('cashier')
 def cashier_add_payment():
     student_id = request.form.get('student_id')
-    amount = float(request.form.get('amount'))
+    try:
+        amount = float(request.form.get('amount'))
+    except (TypeError, ValueError):
+        flash('Amount must be a valid number.', 'danger')
+        return redirect(url_for('cashier_dashboard'))
+    if amount <= 0:
+        flash('Payment amount must be greater than zero.', 'danger')
+        return redirect(url_for('cashier_dashboard'))
     payment_method = request.form.get('payment_method')
     reference = request.form.get('reference')
 
@@ -1169,7 +1252,9 @@ def cashier_add_payment():
     )
     db.session.add(payment)
 
-    fee_account = FeeAccount.query.filter_by(student_id=student.id, campus_id=current_user.campus_id).first()
+    term = get_current_term()
+    fee_account = FeeAccount.query.filter_by(student_id=student.id, term=term,
+                                             campus_id=current_user.campus_id).first()
     if fee_account:
         fee_account.amount_paid += amount
         fee_account.balance = fee_account.total_fees - fee_account.amount_paid
@@ -1182,10 +1267,11 @@ def cashier_add_payment():
     return redirect(url_for('cashier_student_fees'))
 
 
-@app.route('/staff/cashier/payment/clear/<int:payment_id>')
+@app.route('/staff/cashier/payment/clear/<int:payment_id>', methods=['POST'])
 @login_required
 @role_required('cashier')
 def cashier_clear_payment(payment_id):
+    _check_csrf()
     payment = scoped_get_or_404(Payment, payment_id)
     payment.cleared = True
     payment.cleared_at = datetime.now()
@@ -1199,8 +1285,18 @@ def cashier_clear_payment(payment_id):
 @role_required('cashier')
 def cashier_setup_fees():
     student_id = request.form.get('student_id')
-    term = request.form.get('term')
-    total_fees = float(request.form.get('total_fees'))
+    term = (request.form.get('term') or '').strip()
+    try:
+        total_fees = float(request.form.get('total_fees'))
+    except (TypeError, ValueError):
+        flash('Total fees must be a valid number.', 'danger')
+        return redirect(url_for('cashier_dashboard'))
+    if total_fees < 0:
+        flash('Total fees cannot be negative.', 'danger')
+        return redirect(url_for('cashier_dashboard'))
+    if not term:
+        flash('Term is required.', 'danger')
+        return redirect(url_for('cashier_dashboard'))
 
     student = scoped(Student).filter_by(id=student_id).first()
     if not student:
@@ -1248,7 +1344,7 @@ def admin_add_student():
         address = request.form.get('address')
         form = request.form.get('form')
         curriculum = request.form.get('curriculum')
-        email = request.form.get('email')
+        email = (request.form.get('email') or '').strip() or None
         phone = request.form.get('phone')
         next_of_kin_name = request.form.get('next_of_kin_name')
         next_of_kin_relationship = request.form.get('next_of_kin_relationship')
@@ -1261,6 +1357,10 @@ def admin_add_student():
             except (TypeError, ValueError):
                 continue
 
+        if email and Student.query.filter_by(email=email).first():
+            flash('A student with that email address already exists.', 'danger')
+            return redirect(url_for('admin_add_student'))
+
         student_id = generate_student_id()
         reg_number = f'REG{student_id}'
         target_campus_id = get_selected_campus_id()
@@ -1268,7 +1368,7 @@ def admin_add_student():
         student = Student(
             student_id=student_id, first_name=first_name, last_name=last_name,
             date_of_birth=date_of_birth or None, address=address or None,
-            form=form, curriculum=curriculum, email=email or None, phone=phone, reg_number=reg_number,
+            form=form, curriculum=curriculum, email=email, phone=phone, reg_number=reg_number,
             next_of_kin_name=next_of_kin_name or None, next_of_kin_relationship=next_of_kin_relationship or None,
             next_of_kin_phone=next_of_kin_phone or None,
             campus_id=target_campus_id
@@ -1290,8 +1390,14 @@ def admin_add_student():
             db.session.add(FeeAccount(student_id=student.id, term=get_current_term(), campus_id=target_campus_id,
                                       total_fees=term_fee, amount_paid=0.0, balance=term_fee))
 
-        db.session.commit()
-        log_activity('New student registered', f'{first_name} {last_name} ({reg_number})', user=current_user)
+        try:
+            db.session.commit()
+        except IntegrityError:
+            db.session.rollback()
+            flash('Could not save the student: duplicate record or invalid data. Please try again.', 'danger')
+            return redirect(url_for('admin_add_student'))
+        log_activity('New student registered', f'{first_name} {last_name} ({reg_number})',
+                     user=current_user, campus_id=target_campus_id)
         flash(f'Student {first_name} {last_name} added. ID: {student_id}, Reg: {reg_number}', 'success')
         return redirect(url_for('admin_dashboard'))
 
@@ -1340,6 +1446,8 @@ def admin_import_students():
 
         target_campus_id = get_selected_campus_id()
         term = get_current_term()
+        existing_emails = {row[0] for row in db.session.query(Student.email).filter(Student.email.isnot(None)).all()}
+        seen_emails = set(existing_emails)
         added = skipped = 0
         for i, row in enumerate(rows[1:], start=2):
             def get_val(name):
@@ -1361,7 +1469,12 @@ def admin_import_students():
             if curriculum not in ('ZIMSEC', 'CAMBRIDGE'):
                 curriculum = 'ZIMSEC'
             email = get_val('email')
+            if email and email.lower() in seen_emails:
+                skipped += 1
+                continue
             phone = get_val('phone')
+            if email:
+                seen_emails.add(email.lower())
 
             student_id = generate_student_id()
             student = Student(student_id=student_id, first_name=first_name, last_name=last_name,
@@ -1376,8 +1489,16 @@ def admin_import_students():
                                           total_fees=term_fee, amount_paid=0.0, balance=term_fee))
             added += 1
 
-        db.session.commit()
-        log_activity('Bulk students imported', f'{added} students added via Excel upload', user=current_user)
+        try:
+            db.session.commit()
+        except IntegrityError:
+            db.session.rollback()
+            flash('Import failed: the file contains duplicate student emails or invalid data. No students were added.', 'danger')
+            if current_user.role == 'principal':
+                return redirect(url_for('principal_dashboard'))
+            return redirect(url_for('admin_dashboard'))
+        log_activity('Bulk students imported', f'{added} students added via Excel upload',
+                     user=current_user, campus_id=target_campus_id)
         flash(f'Import complete: {added} student(s) added, {skipped} row(s) skipped. Default password: student123', 'success' if added else 'warning')
         if current_user.role == 'principal':
             return redirect(url_for('principal_dashboard'))
@@ -1463,10 +1584,11 @@ def admin_edit_student(student_id):
     return render_template('staff/admin/edit_student.html', student=student, subjects=subjects, enrolled_ids=enrolled_ids, o_level=o_level, a_level=a_level)
 
 
-@app.route('/staff/admin/student/deactivate/<int:student_id>')
+@app.route('/staff/admin/student/deactivate/<int:student_id>', methods=['POST'])
 @login_required
 @role_required('admin')
 def admin_deactivate_student(student_id):
+    _check_csrf()
     student = scoped_get_or_404(Student, student_id)
     student.is_active = not student.is_active
     status = 'reactivated' if student.is_active else 'deactivated (transferred)'
@@ -1475,11 +1597,12 @@ def admin_deactivate_student(student_id):
     return redirect(url_for('admin_dashboard'))
 
 
-@app.route('/staff/admin/student/remove/<int:student_id>')
-@app.route('/staff/principal/student/remove/<int:student_id>')
+@app.route('/staff/admin/student/remove/<int:student_id>', methods=['POST'])
+@app.route('/staff/principal/student/remove/<int:student_id>', methods=['POST'])
 @login_required
 @role_required('admin', 'principal')
 def remove_student(student_id):
+    _check_csrf()
     student = scoped_get_or_404(Student, student_id)
     name = student.full_name
     sid_label = student.student_id
@@ -1624,12 +1747,21 @@ def principal_student_results(student_id):
 def principal_save_comment():
     student_id = request.form.get('student_id')
     subject_id = request.form.get('subject_id')
-    term = request.form.get('term')
-    academic_year = request.form.get('academic_year')
-    comment = request.form.get('comment')
+    term = (request.form.get('term') or '').strip()
+    academic_year = (request.form.get('academic_year') or '').strip()
+    comment = (request.form.get('comment') or '').strip()
+
+    student = scoped(Student).filter_by(id=student_id).first()
+    subject = scoped(Subject).filter_by(id=subject_id).first()
+    if not student or not subject:
+        flash('Student or subject not found in your campus.', 'danger')
+        return redirect(url_for('principal_dashboard'))
+    if not (term and academic_year and comment):
+        flash('Term, academic year and comment are required.', 'danger')
+        return redirect(url_for('principal_student_results', student_id=student_id))
 
     existing = PrincipalComment.query.filter_by(
-        student_id=student_id, subject_id=subject_id,
+        student_id=student.id, subject_id=subject.id,
         term=term, academic_year=academic_year,
         campus_id=current_user.campus_id
     ).first()
@@ -1637,14 +1769,14 @@ def principal_save_comment():
         existing.comment = comment
     else:
         pc = PrincipalComment(
-            student_id=student_id, subject_id=subject_id,
+            student_id=student.id, subject_id=subject.id,
             term=term, academic_year=academic_year, comment=comment,
             campus_id=current_user.campus_id
         )
         db.session.add(pc)
     db.session.commit()
     flash('Comment saved.', 'success')
-    return redirect(url_for('principal_student_results', student_id=student_id))
+    return redirect(url_for('principal_student_results', student_id=student.id))
 
 
 @app.route('/staff/principal/staff/add', methods=['GET', 'POST'])
@@ -1660,6 +1792,11 @@ def principal_add_staff():
         full_name = request.form.get('full_name')
         phone = request.form.get('phone')
         subject_id = request.form.get('subject_id')
+
+        allowed_roles = {'admin', 'teacher', 'cashier'}
+        if role not in allowed_roles:
+            flash('Invalid role selected.', 'danger')
+            return redirect(url_for('principal_add_staff'))
 
         if User.query.filter_by(username=username).first():
             flash('Username already exists.', 'danger')
@@ -1689,6 +1826,9 @@ def principal_add_staff():
                 subject_id = int(subject_id)
             except (TypeError, ValueError):
                 flash('Please select a valid subject for the teacher.', 'danger')
+                return redirect(url_for('principal_add_staff'))
+            if not scoped(Subject).filter(Subject.id == subject_id).first():
+                flash('Please select a subject that belongs to your campus.', 'danger')
                 return redirect(url_for('principal_add_staff'))
         final_email = staff_email(username, email)
         if User.query.filter(User.email == final_email).first():
@@ -1730,6 +1870,11 @@ def principal_edit_staff(staff_id):
     subjects = scoped(Subject).all()
 
     if request.method == 'POST':
+        role = request.form.get('role')
+        allowed_roles = {'admin', 'teacher', 'cashier'}
+        if role not in allowed_roles:
+            flash('Invalid role selected.', 'danger')
+            return redirect(url_for('principal_edit_staff', staff_id=staff_id))
         final_email = staff_email(staff_member.username, request.form.get('email'))
         if User.query.filter(User.email == final_email, User.id != staff_member.id).first():
             flash('That email is already used by another staff member.', 'danger')
@@ -1737,7 +1882,7 @@ def principal_edit_staff(staff_id):
         staff_member.full_name = request.form.get('full_name')
         staff_member.email = final_email
         staff_member.phone = request.form.get('phone')
-        staff_member.role = request.form.get('role')
+        staff_member.role = role
         subj = request.form.get('subject_id')
         if subj:
             try:
@@ -1745,7 +1890,10 @@ def principal_edit_staff(staff_id):
             except (TypeError, ValueError):
                 flash('Please select a valid subject for the teacher.', 'danger')
                 return redirect(url_for('principal_edit_staff', staff_id=staff_id))
-        staff_member.subject_id = subj if request.form.get('role') == 'teacher' else None
+            if role == 'teacher' and not scoped(Subject).filter(Subject.id == subj).first():
+                flash('Please select a subject that belongs to your campus.', 'danger')
+                return redirect(url_for('principal_edit_staff', staff_id=staff_id))
+        staff_member.subject_id = subj if role == 'teacher' else None
         if request.form.get('password'):
             staff_member.set_password(request.form.get('password'))
         db.session.commit()
@@ -1755,13 +1903,20 @@ def principal_edit_staff(staff_id):
     return render_template('staff/principal/edit_staff.html', staff=staff_member, subjects=subjects)
 
 
-@app.route('/staff/principal/staff/fire/<int:staff_id>')
+@app.route('/staff/principal/staff/fire/<int:staff_id>', methods=['POST'])
 @login_required
 @role_required('principal')
 def principal_fire_staff(staff_id):
+    _check_csrf()
     staff_member = scoped_get_or_404(User, staff_id)
     if staff_member.role == 'principal':
         flash('Cannot fire the principal.', 'danger')
+        return redirect(url_for('principal_dashboard'))
+    if staff_member.role == 'super_admin':
+        flash('Cannot fire a super admin.', 'danger')
+        return redirect(url_for('principal_dashboard'))
+    if staff_member.id == current_user.id:
+        flash('You cannot remove your own account.', 'danger')
         return redirect(url_for('principal_dashboard'))
     full_name = staff_member.full_name
     db.session.delete(staff_member)
@@ -1770,10 +1925,11 @@ def principal_fire_staff(staff_id):
     return redirect(url_for('principal_dashboard'))
 
 
-@app.route('/staff/principal/student/toggle-status/<int:student_id>')
+@app.route('/staff/principal/student/toggle-status/<int:student_id>', methods=['POST'])
 @login_required
 @role_required('principal')
 def principal_toggle_student_status(student_id):
+    _check_csrf()
     student = scoped_get_or_404(Student, student_id)
     student.is_active = not student.is_active
     status = 'reactivated' if student.is_active else 'deactivated'
@@ -1799,14 +1955,24 @@ def principal_staff_leave():
         if not staff_id or not leave_type or not start_date or not end_date:
             flash('Please fill in all required fields.', 'danger')
             return redirect(url_for('principal_staff_leave'))
-        staff_member = scoped_get_or_404(User, int(staff_id))
+        try:
+            staff_member = scoped_get_or_404(User, int(staff_id))
+        except (TypeError, ValueError):
+            flash('Please select a valid staff member.', 'danger')
+            return redirect(url_for('principal_staff_leave'))
         if start_date > end_date:
             flash('Start date cannot be after end date.', 'danger')
             return redirect(url_for('principal_staff_leave'))
+        try:
+            start = datetime.strptime(start_date, '%Y-%m-%d').date()
+            end = datetime.strptime(end_date, '%Y-%m-%d').date()
+        except (TypeError, ValueError):
+            flash('Please provide valid leave dates (YYYY-MM-DD).', 'danger')
+            return redirect(url_for('principal_staff_leave'))
         leave = StaffLeave(
             campus_id=cid, user_id=staff_member.id, leave_type=leave_type,
-            start_date=datetime.strptime(start_date, '%Y-%m-%d').date(),
-            end_date=datetime.strptime(end_date, '%Y-%m-%d').date(),
+            start_date=start,
+            end_date=end,
             status='Approved', reason=reason or None
         )
         db.session.add(leave)
@@ -1880,10 +2046,29 @@ def principal_add_timetable():
     blocked = _block_super_admin()
     if blocked:
         return blocked
+    form = (request.form.get('form') or '').strip()
+    day_of_week = (request.form.get('day_of_week') or '').strip()
+    start_time = (request.form.get('start_time') or '').strip()
+    end_time = (request.form.get('end_time') or '').strip()
+    try:
+        subject_id = int(request.form.get('subject_id'))
+        teacher_id = int(request.form.get('teacher_id'))
+    except (TypeError, ValueError):
+        flash('Please select a subject and teacher.', 'danger')
+        return redirect(url_for('principal_timetables'))
+    if not (form and day_of_week and start_time and end_time):
+        flash('All fields are required.', 'danger')
+        return redirect(url_for('principal_timetables'))
+    if not scoped(Subject).filter(Subject.id == subject_id).first():
+        flash('Please select a subject that belongs to your campus.', 'danger')
+        return redirect(url_for('principal_timetables'))
+    if not scoped(User).filter(User.id == teacher_id, User.role == 'teacher').first():
+        flash('Please select a teacher from your campus.', 'danger')
+        return redirect(url_for('principal_timetables'))
     tt = Timetable(
-        form=request.form.get('form'), day_of_week=request.form.get('day_of_week'),
-        subject_id=int(request.form.get('subject_id')), start_time=request.form.get('start_time'),
-        end_time=request.form.get('end_time'), teacher_id=int(request.form.get('teacher_id')),
+        form=form, day_of_week=day_of_week,
+        subject_id=subject_id, start_time=start_time,
+        end_time=end_time, teacher_id=teacher_id,
         room=request.form.get('room'), campus_id=current_user.campus_id
     )
     db.session.add(tt)
@@ -1899,10 +2084,25 @@ def principal_add_exam_timetable():
     blocked = _block_super_admin()
     if blocked:
         return blocked
+    form = (request.form.get('form') or '').strip()
+    start_time = (request.form.get('start_time') or '').strip()
+    end_time = (request.form.get('end_time') or '').strip()
+    try:
+        subject_id = int(request.form.get('subject_id'))
+        exam_date = datetime.strptime(request.form.get('exam_date'), '%Y-%m-%d').date()
+    except (TypeError, ValueError):
+        flash('Please provide a valid subject and exam date (YYYY-MM-DD).', 'danger')
+        return redirect(url_for('principal_timetables'))
+    if not (form and start_time and end_time):
+        flash('All fields are required.', 'danger')
+        return redirect(url_for('principal_timetables'))
+    if not scoped(Subject).filter(Subject.id == subject_id).first():
+        flash('Please select a subject that belongs to your campus.', 'danger')
+        return redirect(url_for('principal_timetables'))
     ett = ExamTimetable(
-        form=request.form.get('form'), subject_id=int(request.form.get('subject_id')),
-        exam_date=datetime.strptime(request.form.get('exam_date'), '%Y-%m-%d').date(),
-        start_time=request.form.get('start_time'), end_time=request.form.get('end_time'),
+        form=form, subject_id=subject_id,
+        exam_date=exam_date,
+        start_time=start_time, end_time=end_time,
         room=request.form.get('room'), campus_id=current_user.campus_id
     )
     db.session.add(ett)
@@ -1911,10 +2111,11 @@ def principal_add_exam_timetable():
     return redirect(url_for('principal_timetables'))
 
 
-@app.route('/staff/principal/timetable/delete/<int:tt_id>')
+@app.route('/staff/principal/timetable/delete/<int:tt_id>', methods=['POST'])
 @login_required
 @role_required('principal')
 def principal_delete_timetable(tt_id):
+    _check_csrf()
     blocked = _block_super_admin()
     if blocked:
         return blocked
@@ -1924,10 +2125,11 @@ def principal_delete_timetable(tt_id):
     return redirect(url_for('principal_timetables'))
 
 
-@app.route('/staff/principal/exam-timetable/delete/<int:ett_id>')
+@app.route('/staff/principal/exam-timetable/delete/<int:ett_id>', methods=['POST'])
 @login_required
 @role_required('principal')
 def principal_delete_exam_timetable(ett_id):
+    _check_csrf()
     blocked = _block_super_admin()
     if blocked:
         return blocked
@@ -1943,7 +2145,10 @@ def principal_delete_exam_timetable(ett_id):
 def principal_fee_settings():
     if request.method == 'POST':
         form = request.form.get('form', '').strip()
-        term_fee = float(request.form.get('term_fee', 0))
+        try:
+            term_fee = float(request.form.get('term_fee', 0))
+        except (TypeError, ValueError):
+            term_fee = -1
         if form and term_fee > 0:
             existing = FeeSetting.query.filter_by(form=form, campus_id=current_user.campus_id).first()
             if existing:
@@ -1952,6 +2157,8 @@ def principal_fee_settings():
                 db.session.add(FeeSetting(form=form, term_fee=term_fee, campus_id=current_user.campus_id))
             db.session.commit()
             flash(f'Fee for {form} set to ${term_fee:.2f}.', 'success')
+        else:
+            flash('Please provide a valid form and a fee greater than zero.', 'danger')
         return redirect(url_for('principal_fee_settings'))
 
     fee_settings = scoped(FeeSetting).order_by(FeeSetting.form).all()
@@ -1959,10 +2166,11 @@ def principal_fee_settings():
     return render_template('staff/principal/fee_settings.html', fee_settings=fee_settings, forms=forms)
 
 
-@app.route('/staff/principal/fee-settings/delete/<int:fs_id>')
+@app.route('/staff/principal/fee-settings/delete/<int:fs_id>', methods=['POST'])
 @login_required
 @role_required('principal')
 def principal_delete_fee_setting(fs_id):
+    _check_csrf()
     fs = scoped_get_or_404(FeeSetting, fs_id)
     db.session.delete(fs)
     db.session.commit()
@@ -1979,8 +2187,15 @@ def principal_edit_student_fees(student_id):
     default_fee = fee_account.total_fees if fee_account else get_term_fee(student.form, campus_id=current_user.campus_id)
 
     if request.method == 'POST':
-        total_fees = float(request.form.get('total_fees', 0))
-        amount_paid = float(request.form.get('amount_paid', 0))
+        try:
+            total_fees = float(request.form.get('total_fees', 0))
+            amount_paid = float(request.form.get('amount_paid', 0))
+        except (TypeError, ValueError):
+            flash('Fees must be valid numbers.', 'danger')
+            return redirect(url_for('principal_edit_student_fees', student_id=student.id))
+        if total_fees < 0 or amount_paid < 0:
+            flash('Fees cannot be negative.', 'danger')
+            return redirect(url_for('principal_edit_student_fees', student_id=student.id))
         if not fee_account:
             fee_account = FeeAccount(student_id=student.id, term=get_current_term(), campus_id=current_user.campus_id)
             db.session.add(fee_account)
@@ -2032,15 +2247,23 @@ def export_ministry_report():
         f = student_form.get(e.student_id)
         if f:
             by_form.setdefault(f, []).append(e)
-    fee_total = compute_expected_fees(term, current_user.campus_id)
-    fee_collected = db.session.query(db.func.sum(Payment.amount)).filter(Payment.cleared == True, Payment.campus_id == current_user.campus_id).scalar() or 0
-    outstanding_fees = fee_total - fee_collected
+    accounts = FeeAccount.query.filter_by(term=term, campus_id=current_user.campus_id).all()
+    acct_by_student = {a.student_id: a.total_fees for a in accounts}
+    expected_by_student = {s.id: acct_by_student.get(s.id, get_term_fee(s.form, campus_id=current_user.campus_id))
+                           for s in all_students}
+    cleared_rows = db.session.query(Payment.student_id, db.func.sum(Payment.amount)).filter(
+        Payment.cleared == True, Payment.campus_id == current_user.campus_id).group_by(Payment.student_id).all()
+    collected_by_student = dict(cleared_rows)
     for f in forms:
-        total = sum(1 for s in all_students if s.form == f)
+        students = [s for s in all_students if s.form == f]
+        total = len(students)
         exams = by_form.get(f, [])
         passed = sum(1 for e in exams if e.total_marks > 0 and e.marks / e.total_marks * 100 >= 50)
-        pass_rate = round(passed / total * 100, 1) if total > 0 else 0
-        writer.writerow([f, total, passed, f'{pass_rate}%', f'${fee_total:.2f}', f'${fee_collected:.2f}', f'${outstanding_fees:.2f}'])
+        pass_rate = round(passed / len(exams) * 100, 1) if exams else 0
+        fee_total = sum(expected_by_student.get(s.id, 0) for s in students)
+        fee_collected = sum(collected_by_student.get(s.id, 0) for s in students)
+        outstanding = fee_total - fee_collected
+        writer.writerow([f, total, passed, f'{pass_rate}%', f'${fee_total:.2f}', f'${fee_collected:.2f}', f'${outstanding:.2f}'])
     response = app.response_class(output.getvalue(), mimetype='text/csv',
                                   headers={'Content-Disposition': 'attachment; filename=ministry_report.csv'})
     log_activity('Exported Ministry report', user=current_user)
@@ -2557,6 +2780,11 @@ def _ensure_all_campus_subjects():
 
 @app.route('/setup')
 def setup():
+    # Optional hard gate: when SETUP_TOKEN is configured, /setup requires
+    # ?token=<value> and is otherwise unreachable even if ENABLE_SETUP=true.
+    setup_token = os.environ.get('SETUP_TOKEN')
+    if setup_token and request.args.get('token') != setup_token:
+        return 'Setup is disabled.', 403
     if Subject.query.first() is not None and os.environ.get('ENABLE_SETUP', '').lower() != 'true':
         return 'Setup is disabled.', 403
     db.drop_all()
@@ -2761,7 +2989,11 @@ def parse_float_field(value, default=0.0):
 def _debug_500(e):
     tb = traceback.format_exc()
     app.logger.error('500 error:\n%s', tb)
-    return f'<html><body><h1>Internal Server Error</h1><pre>{tb}</pre></body></html>', 500
+    if app.debug:
+        return f'<html><body><h1>Internal Server Error</h1><pre>{tb}</pre></body></html>', 500
+    return ('<html><body><h1>Internal Server Error</h1>'
+            '<p>Something went wrong on our end. Please try again or contact the administrator.</p>'
+            '</body></html>', 500)
 
 
 if __name__ == '__main__':

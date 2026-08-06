@@ -23,7 +23,7 @@
         <div class="card stat-card bg-success text-white">
             <div class="card-body">
                 <div class="stat-icon"><i class="bi bi-check-circle"></i></div>
-                <p class="stat-number">{{ payments|selectattr('cleared')|list|length }}</p>
+                <p class="stat-number">{{ cleared_count }}</p>
                 <p class="stat-label">Cleared Payments</p>
             </div>
         </div>
@@ -52,7 +52,7 @@
                 </thead>
                 <tbody>
                     {% for s in all_students %}
-                    {% set fa = s.fee_account %}
+                    {% set fa = fee_map.get(s.id) %}
                     <tr>
                         <td><strong>{{ s.student_id }}</strong></td>
                         <td>{{ s.full_name }}</td>
@@ -112,7 +112,7 @@
                         <td>{{ p.payment_method or '-' }}</td>
                         <td>{{ p.created_at.strftime('%d-%m-%Y %H:%M') }}</td>
                         <td>{% if p.cleared %}<span class="badge bg-success">Cleared</span>{% else %}<span class="badge bg-warning text-dark">Pending</span>{% endif %}</td>
-                        <td>{% if not p.cleared %}<a href="{{ url_for('cashier_clear_payment', payment_id=p.id) }}" class="btn btn-sm btn-success" onclick="return confirm('Clear this payment?')"><i class="bi bi-check-lg"></i> Clear</a>{% endif %}</td>
+                        <td>{% if not p.cleared %}<form method="POST" action="{{ url_for('cashier_clear_payment', payment_id=p.id) }}" class="d-inline" onsubmit="return confirm('Clear this payment?');"><input type="hidden" name="_csrf_token" value="{{ csrf_token() }}"><button type="submit" class="btn btn-sm btn-success"><i class="bi bi-check-lg"></i> Clear</button></form>{% endif %}</td>
                     </tr>
                     {% endfor %}
                 </tbody>

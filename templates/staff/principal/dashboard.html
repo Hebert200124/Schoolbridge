@@ -41,10 +41,16 @@
                                 <td>
                                     <a href="{{ url_for('principal_student_results', student_id=s.id) }}" class="btn btn-sm btn-info text-white"><i class="bi bi-file-text"></i> Results</a>
                                     <a href="{{ url_for('principal_edit_student_fees', student_id=s.id) }}" class="btn btn-sm btn-outline-warning"><i class="bi bi-currency-dollar"></i> Fees</a>
-                                    <a href="{{ url_for('principal_toggle_student_status', student_id=s.id) }}" class="btn btn-sm btn-outline-{{ 'danger' if s.is_active else 'success' }}" onclick="return confirm('{{ 'Deactivate' if s.is_active else 'Reactivate' }} {{ s.full_name }}?')">
-                                        <i class="bi bi-{{ 'person-x' if s.is_active else 'person-check' }}"></i>
-                                    </a>
-                                    <a href="{{ url_for('remove_student', student_id=s.id) }}" class="btn btn-sm btn-outline-danger" onclick="return confirm('Permanently remove {{ s.full_name }} and all their records? This cannot be undone.')"><i class="bi bi-trash"></i></a>
+                                    <form method="POST" action="{{ url_for('principal_toggle_student_status', student_id=s.id) }}" class="d-inline" onsubmit="return confirm('{{ 'Deactivate' if s.is_active else 'Reactivate' }} {{ s.full_name }}?');">
+                                        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                                        <button type="submit" class="btn btn-sm btn-outline-{{ 'danger' if s.is_active else 'success' }}">
+                                            <i class="bi bi-{{ 'person-x' if s.is_active else 'person-check' }}"></i>
+                                        </button>
+                                    </form>
+                                    <form method="POST" action="{{ url_for('remove_student', student_id=s.id) }}" class="d-inline" onsubmit="return confirm('Permanently remove {{ s.full_name }} and all their records? This cannot be undone.');">
+                                        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                                        <button type="submit" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+                                    </form>
                                 </td>
                             </tr>
                             {% endfor %}

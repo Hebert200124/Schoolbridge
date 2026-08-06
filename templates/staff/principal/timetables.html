@@ -76,7 +76,7 @@
                             <tr>
                                 <td>{{ tt.form }}</td><td>{{ tt.day_of_week }}</td><td>{{ tt.start_time }}-{{ tt.end_time }}</td>
                                 <td>{{ tt.subject_rel.name }}</td><td>{{ tt.teacher_rel.full_name }}</td><td>{{ tt.room or '-' }}</td>
-                                <td><a href="{{ url_for('principal_delete_timetable', tt_id=tt.id) }}" class="btn btn-sm btn-outline-danger" onclick="return confirm('Delete?')"><i class="bi bi-trash"></i></a></td>
+                                <td><form method="POST" action="{{ url_for('principal_delete_timetable', tt_id=tt.id) }}" class="d-inline" onsubmit="return confirm('Delete this timetable entry?');"><input type="hidden" name="_csrf_token" value="{{ csrf_token() }}"><button type="submit" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button></form></td>
                             </tr>
                             {% endfor %}
                         </tbody>
@@ -142,7 +142,7 @@
                             <tr>
                                 <td>{{ ett.form }}</td><td>{{ ett.subject_rel.name }}</td><td>{{ ett.exam_date.strftime('%d-%m-%Y') }}</td>
                                 <td>{{ ett.start_time }}-{{ ett.end_time }}</td><td>{{ ett.room or '-' }}</td>
-                                <td><a href="{{ url_for('principal_delete_exam_timetable', ett_id=ett.id) }}" class="btn btn-sm btn-outline-danger" onclick="return confirm('Delete?')"><i class="bi bi-trash"></i></a></td>
+                                <td><form method="POST" action="{{ url_for('principal_delete_exam_timetable', ett_id=ett.id) }}" class="d-inline" onsubmit="return confirm('Delete this exam timetable entry?');"><input type="hidden" name="_csrf_token" value="{{ csrf_token() }}"><button type="submit" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button></form></td>
                             </tr>
                             {% endfor %}
                         </tbody>

@@ -38,7 +38,7 @@
                                 <td><small>{{ ad.created_at.strftime('%d %b %Y') }}</small></td>
                                 <td>
                                     <a href="{{ url_for('super_admin_edit_advertisement', id=ad.id) }}" class="btn btn-sm btn-outline-secondary"><i class="bi bi-pencil"></i> Edit</a>
-                                    <form method="POST" action="{{ url_for('super_admin_delete_advertisement', id=ad.id) }}" class="d-inline" onsubmit="return confirm('Delete advertisement &quot;{{ ad.title }}&quot;?');">
+                                    <form method="POST" action="{{ url_for('super_admin_delete_advertisement', id=ad.id) }}" class="d-inline" onsubmit="return confirm('Delete advertisement ' + {{ ad.title|tojson }} + '?');">
                                         <button type="submit" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i> Delete</button>
                                     </form>
                                 </td>

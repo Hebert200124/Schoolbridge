@@ -45,7 +45,10 @@
                                     <span class="badge bg-secondary">Monthly Test</span>
                                     <span class="grade-{{ 'a' if subject.level == 'A' else 'o' }}-{{ mt.grade(subject.level) }}">{{ mt.grade(subject.level) }}</span>
                                     <button class="btn btn-sm btn-outline-primary edit-mark-btn" data-id="{{ mt.id }}" data-type="monthly" data-marks="{{ mt.marks }}" data-total="{{ mt.total_marks }}" data-comment="{{ mt.comment or '' }}"><i class="bi bi-pencil"></i></button>
-                                    <a href="{{ url_for('teacher_delete_mark', mark_id=mt.id, mark_type='monthly') }}" class="btn btn-sm btn-outline-danger" onclick="return confirm('Delete?')"><i class="bi bi-trash"></i></a>
+                                    <form method="POST" action="{{ url_for('teacher_delete_mark', mark_id=mt.id, mark_type='monthly') }}" class="d-inline" onsubmit="return confirm('Delete this mark?');">
+                                        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                                        <button type="submit" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+                                    </form>
                                 {% endif %}
                             {% else %}
                                 {% set em = s_exam.get(col.key) %}
@@ -54,7 +57,10 @@
                                     <span class="badge bg-primary">Exam</span>
                                     <span class="grade-{{ 'a' if subject.level == 'A' else 'o' }}-{{ em.grade(subject.level) }}">{{ em.grade(subject.level) }}</span>
                                     <button class="btn btn-sm btn-outline-primary edit-mark-btn" data-id="{{ em.id }}" data-type="exam" data-marks="{{ em.marks }}" data-total="{{ em.total_marks }}" data-comment="{{ em.comment or '' }}"><i class="bi bi-pencil"></i></button>
-                                    <a href="{{ url_for('teacher_delete_mark', mark_id=em.id, mark_type='exam') }}" class="btn btn-sm btn-outline-danger" onclick="return confirm('Delete?')"><i class="bi bi-trash"></i></a>
+                                    <form method="POST" action="{{ url_for('teacher_delete_mark', mark_id=em.id, mark_type='exam') }}" class="d-inline" onsubmit="return confirm('Delete this mark?');">
+                                        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                                        <button type="submit" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+                                    </form>
                                 {% endif %}
                             {% endif %}
                         </td>
