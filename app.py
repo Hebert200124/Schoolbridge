@@ -943,23 +943,57 @@ def teacher_marks():
     monthly_tests = MonthlyTest.query.filter_by(subject_id=current_user.subject_id).order_by(MonthlyTest.id).all()
     exam_marks_list = ExamMark.query.filter_by(subject_id=current_user.subject_id).order_by(ExamMark.id).all()
 
+    # Key helpers map each column to the exact stored assessment
+    def monthly_key(mt):
+        return 'm|%s|%s|%s' % (mt.academic_year or '', mt.term or '', mt.month or '')
+
+    def exam_key(em):
+        return 'e|%s' % (em.exam_type or '')
+
     marks_data = {}
     for s in students:
         s_monthly = [mt for mt in monthly_tests if mt.student_id == s.id]
         s_exam = [em for em in exam_marks_list if em.student_id == s.id]
-        marks_data[s.id] = {'monthly': s_monthly, 'exam': s_exam}
+        marks_data[s.id] = {
+            'monthly': {monthly_key(mt): mt for mt in s_monthly},
+            'exam': {exam_key(em): em for em in s_exam},
+        }
 
-    # Database-driven assessment columns: only show columns for assessments that have marks entered
-    max_monthly = max((len(md['monthly']) for md in marks_data.values()), default=0)
+    # One column per actual stored assessment (monthly tests chronologically, then exams)
+    MONTH_ORDER = ['January', 'February', 'March', 'April', 'May', 'June',
+                   'July', 'August', 'September', 'October', 'November', 'December']
+    TERM_ORDER = {'Term 1': 1, 'Term 2': 2, 'Term 3': 3}
+
+    monthly_keys = []
+    for mt in monthly_tests:
+        k = monthly_key(mt)
+        if k not in monthly_keys:
+            monthly_keys.append(k)
+    monthly_keys.sort(key=lambda k: (k.split('|')[1], TERM_ORDER.get(k.split('|')[2], 99),
+                                     MONTH_ORDER.index(k.split('|')[3]) if k.split('|')[3] in MONTH_ORDER else 99))
+
+    month_occurrences = {}
+    for mt in monthly_tests:
+        month_occurrences[mt.month] = month_occurrences.get(mt.month, 0) + 1
+
     assessment_columns = []
-    for pos in range(1, max_monthly + 1):
-        assessment_columns.append({'type': 'monthly', 'pos': pos, 'label': 'Monthly %d' % pos})
-    if any('Mid' in em.exam_type for em in exam_marks_list):
-        assessment_columns.append({'type': 'exam', 'kind': 'Mid', 'label': 'Mid-Term'})
-    if any('End' in em.exam_type or 'Final' in em.exam_type for em in exam_marks_list):
-        assessment_columns.append({'type': 'exam', 'kind': 'End', 'label': 'End-Term'})
+    for k in monthly_keys:
+        _, year, term, month = k.split('|')
+        label = '%s Monthly Test' % month
+        if month_occurrences.get(month, 0) > 1:
+            label = '%s (%s %s)' % (label, term, year)
+        assessment_columns.append({'type': 'monthly', 'key': k, 'label': label})
 
-    return render_template('staff/teacher/marks.html', subject=subject, students=students, marks_data=marks_data, assessment_columns=assessment_columns)
+    exam_keys = []
+    for em in exam_marks_list:
+        k = exam_key(em)
+        if k not in exam_keys:
+            exam_keys.append(k)
+    for k in exam_keys:
+        assessment_columns.append({'type': 'exam', 'key': k, 'label': k[2:]})
+
+    return render_template('staff/teacher/marks.html', subject=subject, students=students,
+                           marks_data=marks_data, assessment_columns=assessment_columns)
 
 
 @app.route('/staff/teacher/marks/add', methods=['POST'])

@@ -39,7 +39,7 @@
                         {% for col in assessment_columns %}
                         <td>
                             {% if col.type == 'monthly' %}
-                                {% set mt = s_monthly[col.pos - 1] if s_monthly|length >= col.pos else None %}
+                                {% set mt = s_monthly.get(col.key) %}
                                 {% if mt %}
                                     {{ mt.marks }}/{{ mt.total_marks }}
                                     <span class="grade-{{ 'a' if subject.level == 'A' else 'o' }}-{{ mt.grade(subject.level) }}">{{ mt.grade(subject.level) }}</span>
@@ -47,21 +47,20 @@
                                     <a href="{{ url_for('teacher_delete_mark', mark_id=mt.id, mark_type='monthly') }}" class="btn btn-sm btn-outline-danger" onclick="return confirm('Delete?')"><i class="bi bi-trash"></i></a>
                                 {% endif %}
                             {% else %}
-                                {% for em in s_exam %}
-                                    {% if (col.kind == 'Mid' and 'Mid' in em.exam_type) or (col.kind == 'End' and ('End' in em.exam_type or 'Final' in em.exam_type)) %}
+                                {% set em = s_exam.get(col.key) %}
+                                {% if em %}
                                     {{ em.marks }}/{{ em.total_marks }}
                                     <span class="grade-{{ 'a' if subject.level == 'A' else 'o' }}-{{ em.grade(subject.level) }}">{{ em.grade(subject.level) }}</span>
                                     <button class="btn btn-sm btn-outline-primary edit-mark-btn" data-id="{{ em.id }}" data-type="exam" data-marks="{{ em.marks }}" data-total="{{ em.total_marks }}" data-comment="{{ em.comment or '' }}"><i class="bi bi-pencil"></i></button>
                                     <a href="{{ url_for('teacher_delete_mark', mark_id=em.id, mark_type='exam') }}" class="btn btn-sm btn-outline-danger" onclick="return confirm('Delete?')"><i class="bi bi-trash"></i></a>
-                                    {% endif %}
-                                {% endfor %}
+                                {% endif %}
                             {% endif %}
                         </td>
                         {% endfor %}
                         <td>
                             {% set ns = namespace(comment=None) %}
-                            {% for mt in s_monthly %}{% set ns.comment = mt.comment %}{% endfor %}
-                            {% for em in s_exam %}{% set ns.comment = em.comment %}{% endfor %}
+                            {% for mt in s_monthly.values() %}{% set ns.comment = mt.comment %}{% endfor %}
+                            {% for em in s_exam.values() %}{% set ns.comment = em.comment %}{% endfor %}
                             <small class="text-muted">{{ ns.comment or '-' }}</small>
                         </td>
                         <td>
