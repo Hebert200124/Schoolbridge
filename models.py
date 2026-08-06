@@ -63,7 +63,8 @@ class User(UserMixin, db.Model):
     is_active = db.Column(db.Boolean, default=True, index=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
 
-    teacher_subject = db.relationship('Subject', backref='teacher', lazy=True, foreign_keys=[subject_id])
+    teacher_subject = db.relationship('Subject', backref=db.backref('teacher', uselist=False, lazy=True),
+                                      lazy=True, foreign_keys=[subject_id])
     payments = db.relationship('Payment', backref='cashier', lazy=True, foreign_keys='Payment.cashier_id')
 
     def set_password(self, password):

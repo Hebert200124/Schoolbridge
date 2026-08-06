@@ -829,7 +829,10 @@ def staff_dashboard():
     if current_user.role == 'teacher':
         subj = current_user.teacher_subject
         stats['subject_name'] = subj.name if subj else 'Not assigned'
-        stats['student_count'] = StudentSubject.query.filter_by(subject_id=current_user.subject_id).count() if current_user.subject_id else 0
+        stats['student_count'] = (StudentSubject.query.filter(
+            StudentSubject.subject_id == current_user.subject_id,
+            StudentSubject.student.has(db.and_(Student.campus_id == current_user.campus_id, Student.is_active == True))
+        ).count() if current_user.subject_id else 0)
         stats['activities_count'] = scoped(Activity).count()
         stats['recent_activity_posts'] = scoped(Activity).order_by(Activity.created_at.desc()).limit(10).all()
         term = 'Term 1'
@@ -2046,10 +2049,7 @@ def student_profile():
     timetables = Timetable.query.filter_by(form=current_user.form, campus_id=current_user.campus_id).order_by(Timetable.day_of_week, Timetable.start_time).all()
     exam_timetables = ExamTimetable.query.filter_by(form=current_user.form, campus_id=current_user.campus_id).order_by(ExamTimetable.exam_date).all()
 
-    subject_teachers = {}
-    for subj in subjects:
-        teacher = User.query.filter_by(subject_id=subj.id, role='teacher').first()
-        subject_teachers[subj.id] = teacher
+    subject_teachers = {subj.id: subj.teacher for subj in subjects}
 
     teacher_remarks = TeacherRemark.query.filter_by(student_id=current_user.id).order_by(TeacherRemark.created_at.desc()).all()
     recent_activity_posts = scoped(Activity).filter_by(visibility='all').order_by(Activity.created_at.desc()).limit(10).all()
@@ -2155,10 +2155,7 @@ def student_timetables():
 @student_required
 def student_subjects():
     subjects = [ss.subject for ss in current_user.subjects if ss.subject]
-    subject_teachers = {}
-    for subj in subjects:
-        teacher = User.query.filter_by(subject_id=subj.id, role='teacher').first()
-        subject_teachers[subj.id] = teacher
+    subject_teachers = {subj.id: subj.teacher for subj in subjects}
     return render_template('student/subjects.html', subjects=subjects, subject_teachers=subject_teachers)
 
 
