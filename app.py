@@ -1203,9 +1203,7 @@ def admin_dashboard():
 @login_required
 @role_required('admin')
 def admin_add_student():
-    subjects = scoped(Subject).all()
-    o_level = [s for s in subjects if s.level == 'O']
-    a_level = [s for s in subjects if s.level == 'A']
+    campuses = Campus.query.order_by(Campus.name).all() if getattr(g, 'is_super_admin', False) else []
     if request.method == 'POST':
         first_name = request.form.get('first_name')
         last_name = request.form.get('last_name')
@@ -1219,7 +1217,12 @@ def admin_add_student():
         next_of_kin_relationship = request.form.get('next_of_kin_relationship')
         next_of_kin_phone = request.form.get('next_of_kin_phone')
         password = request.form.get('password')
-        subject_ids = request.form.getlist('subjects')
+        subject_ids = []
+        for sid in request.form.getlist('subjects'):
+            try:
+                subject_ids.append(int(sid))
+            except (TypeError, ValueError):
+                continue
 
         student_id = generate_student_id()
         reg_number = f'REG{student_id}'
@@ -1238,9 +1241,12 @@ def admin_add_student():
         db.session.add(student)
         db.session.flush()
 
+        valid_ids = {row[0] for row in db.session.query(Subject.id)
+                     .filter(Subject.campus_id == target_campus_id, Subject.id.in_(subject_ids)).all()}
         for sid in subject_ids:
-            ss = StudentSubject(student_id=student.id, subject_id=int(sid))
-            db.session.add(ss)
+            if sid not in valid_ids:
+                continue
+            db.session.add(StudentSubject(student_id=student.id, subject_id=sid))
 
         term_fee = get_term_fee(form, campus_id=target_campus_id)
         if term_fee > 0:
@@ -1252,8 +1258,15 @@ def admin_add_student():
         flash(f'Student {first_name} {last_name} added. ID: {student_id}, Reg: {reg_number}', 'success')
         return redirect(url_for('admin_dashboard'))
 
-    campuses = Campus.query.order_by(Campus.name).all() if getattr(g, 'is_super_admin', False) else []
-    return render_template('staff/admin/add_student.html', subjects=subjects, o_level=o_level, a_level=a_level, campuses=campuses)
+    if getattr(g, 'is_super_admin', False):
+        default_cid = request.args.get('campus_id', type=int) or (campuses[0].id if campuses else current_user.campus_id)
+    else:
+        default_cid = current_user.campus_id
+    subjects = Subject.query.filter_by(campus_id=default_cid).all()
+    o_level = [s for s in subjects if s.level == 'O']
+    a_level = [s for s in subjects if s.level == 'A']
+    return render_template('staff/admin/add_student.html', subjects=subjects, o_level=o_level, a_level=a_level,
+                           campuses=campuses, selected_campus_id=default_cid)
 
 
 @app.route('/staff/admin/students/import', methods=['GET', 'POST'])
@@ -1364,7 +1377,7 @@ def admin_import_student_template():
 def admin_edit_student(student_id):
     student = scoped_get_or_404(Student, student_id)
     original_form = student.form
-    subjects = scoped(Subject).all()
+    subjects = Subject.query.filter_by(campus_id=student.campus_id).all()
     enrolled_ids = [ss.subject_id for ss in student.subjects]
     o_level = [s for s in subjects if s.level == 'O']
     a_level = [s for s in subjects if s.level == 'A']
@@ -1384,10 +1397,19 @@ def admin_edit_student(student_id):
         if request.form.get('password'):
             student.set_password(request.form.get('password'))
 
-        StudentSubject.query.filter_by(student_id=student.id).delete()
+        subject_ids = []
         for sid in request.form.getlist('subjects'):
-            ss = StudentSubject(student_id=student.id, subject_id=int(sid))
-            db.session.add(ss)
+            try:
+                subject_ids.append(int(sid))
+            except (TypeError, ValueError):
+                continue
+        valid_ids = {row[0] for row in db.session.query(Subject.id)
+                     .filter(Subject.campus_id == student.campus_id, Subject.id.in_(subject_ids)).all()}
+        StudentSubject.query.filter_by(student_id=student.id).delete()
+        for sid in subject_ids:
+            if sid not in valid_ids:
+                continue
+            db.session.add(StudentSubject(student_id=student.id, subject_id=sid))
 
         if student.form != original_form:
             fee_account = FeeAccount.query.filter_by(student_id=student.id, term=get_current_term()).first()

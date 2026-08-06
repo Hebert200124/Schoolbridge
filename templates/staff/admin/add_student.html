@@ -16,9 +16,9 @@
                     {% if campuses %}
                     <div class="mb-3">
                         <label class="form-label">Campus</label>
-                        <select class="form-select" name="campus_id" required>
+                        <select class="form-select" name="campus_id" id="campusSelect" required>
                             {% for c in campuses %}
-                            <option value="{{ c.id }}">{{ c.name }} ({{ c.code }})</option>
+                            <option value="{{ c.id }}" {% if c.id == selected_campus_id %}selected{% endif %}>{{ c.name }} ({{ c.code }})</option>
                             {% endfor %}
                         </select>
                     </div>
@@ -128,5 +128,10 @@ document.getElementById('formSelect').addEventListener('change', function() {
     document.getElementById('aLevelSubjects').style.display = (formNum >= 5) ? '' : 'none';
     document.getElementById('noFormMsg').style.display = val ? 'none' : '';
 });
+{% if campuses %}
+document.getElementById('campusSelect').addEventListener('change', function() {
+    window.location.href = window.location.pathname + '?campus_id=' + this.value;
+});
+{% endif %}
 </script>
 {% endblock %}
