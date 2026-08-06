@@ -990,7 +990,7 @@ def teacher_marks():
         if k not in exam_keys:
             exam_keys.append(k)
     for k in exam_keys:
-        assessment_columns.append({'type': 'exam', 'key': k, 'label': k[2:]})
+        assessment_columns.append({'type': 'exam', 'key': k, 'label': 'Exam'})
 
     return render_template('staff/teacher/marks.html', subject=subject, students=students,
                            marks_data=marks_data, assessment_columns=assessment_columns)
