@@ -18,3 +18,21 @@ function togglePassword(fieldId) {
         if (icon) icon.classList.replace('bi-eye-slash', 'bi-eye');
     }
 }
+
+function confirmDelete(form) {
+    var msg = form.getAttribute('data-confirm-msg');
+    return window.confirm(msg || 'Are you sure?');
+}
+
+document.addEventListener('submit', function(e) {
+    var form = e.target;
+    if (!form || form.tagName !== 'FORM') return;
+    if (form.querySelector('input[name="_csrf_token"]')) return;
+    var meta = document.querySelector('meta[name="csrf-token"]');
+    if (!meta) return;
+    var input = document.createElement('input');
+    input.type = 'hidden';
+    input.name = '_csrf_token';
+    input.value = meta.getAttribute('content');
+    form.appendChild(input);
+});

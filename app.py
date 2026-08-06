@@ -213,6 +213,17 @@ with app.app_context():
     _ensure_campus_columns()
     _ensure_per_campus_uniques()
 
+    for _tbl in ('users', 'students'):
+        _cols = [c['name'] for c in inspector.get_columns(_tbl)]
+        if 'failed_login_attempts' not in _cols:
+            with db.engine.connect() as conn:
+                conn.execute(text(f'ALTER TABLE {_tbl} ADD COLUMN failed_login_attempts INTEGER DEFAULT 0'))
+                conn.commit()
+        if 'locked_until' not in _cols:
+            with db.engine.connect() as conn:
+                conn.execute(text(f'ALTER TABLE {_tbl} ADD COLUMN locked_until DATETIME'))
+                conn.commit()
+
 
 
 login_manager = LoginManager(app)
@@ -431,6 +442,18 @@ def _set_campus_context():
         g.is_super_admin = False
 
 
+@app.before_request
+def _csrf_guard():
+    """Reject every POST that does not carry the session's CSRF token.
+
+    The token is injected into every form automatically by main.js from the
+    csrf-token meta tag, and explicitly present on the auth forms, so a POST
+    arriving without it is either forged (cross-site) or missing the token.
+    """
+    if request.method == 'POST':
+        _check_csrf()
+
+
 def scoped(model):
     """Return a query over `model` limited to the logged-in user's campus.
 
@@ -516,26 +539,48 @@ def auth_login():
         password = request.form.get('password') or ''
 
         student = Student.query.filter_by(student_id=username).first()
-        if student and student.check_password(password):
-            if not student.is_active:
-                flash('Account deactivated. Contact admin.', 'danger')
-                return render_template('auth/login.html', advertisement=advertisement)
-            login_user(student)
-            flash(f'Welcome {student.full_name}!', 'success')
-            return redirect(url_for('student_profile'))
-
         user = User.query.filter_by(username=username).first()
-        if user and user.check_password(password):
-            if not user.is_active:
+        target = student or user
+
+        if target is not None and target.is_login_locked():
+            db.session.commit()
+            flash('Account temporarily locked after too many failed attempts. Try again in 15 minutes.', 'danger')
+            return render_template('auth/login.html', advertisement=advertisement)
+
+        authed = None
+        if student and student.check_password(password):
+            authed = student
+        elif user and user.check_password(password):
+            authed = user
+
+        if authed is not None:
+            authed.reset_login_failures()
+            db.session.commit()
+            if isinstance(authed, Student):
+                if not authed.is_active:
+                    flash('Account deactivated. Contact admin.', 'danger')
+                    return render_template('auth/login.html', advertisement=advertisement)
+                login_user(authed)
+                flash(f'Welcome {authed.full_name}!', 'success')
+                return redirect(url_for('student_profile'))
+            if not authed.is_active:
                 flash('Account deactivated. Contact principal.', 'danger')
                 return render_template('auth/login.html', advertisement=advertisement)
-            login_user(user)
-            flash(f'Welcome {user.full_name}!', 'success')
-            if user.role == 'super_admin':
+            login_user(authed)
+            flash(f'Welcome {authed.full_name}!', 'success')
+            if authed.role == 'super_admin':
                 return redirect(url_for('super_admin_dashboard'))
             return redirect(url_for('staff_dashboard'))
 
-        flash('Invalid username or password', 'danger')
+        if target is not None:
+            target.record_failed_login()
+            db.session.commit()
+            if target.locked_until:
+                flash('Too many failed attempts. Account locked for 15 minutes.', 'danger')
+            else:
+                flash('Invalid username or password', 'danger')
+        else:
+            flash('Invalid username or password', 'danger')
 
     return render_template('auth/login.html', advertisement=advertisement)
 

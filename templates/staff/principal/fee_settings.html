@@ -44,7 +44,7 @@
                             <td><strong>{{ fs.form }}</strong></td>
                             <td>${{ "%.2f"|format(fs.term_fee) }}</td>
                             <td><small>{{ fs.updated_at.strftime('%d %b %Y') }}</small></td>
-                            <td><form method="POST" action="{{ url_for('principal_delete_fee_setting', fs_id=fs.id) }}" class="d-inline" onsubmit="return confirm('Remove fee setting for {{ fs.form }}?');"><input type="hidden" name="_csrf_token" value="{{ csrf_token() }}"><button type="submit" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button></form></td>
+                            <td><form method="POST" action="{{ url_for('principal_delete_fee_setting', fs_id=fs.id) }}" class="d-inline" onsubmit="return confirmDelete(this)" data-confirm-msg="Remove fee setting for {{ fs.form }}?"><input type="hidden" name="_csrf_token" value="{{ csrf_token() }}"><button type="submit" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button></form></td>
                         </tr>
                         {% endfor %}
                     </tbody>

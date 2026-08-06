@@ -80,7 +80,7 @@
                                 <td><small>{{ s.email or '-' }}</small></td>
                                 <td><small>{{ s.phone or '-' }}</small></td>
                                 <td>
-                                    <form method="POST" action="{{ url_for('super_admin_fire_staff', campus_id=campus.id, staff_id=s.id) }}" class="d-inline" onsubmit="return confirm('Remove {{ s.full_name }}?')">
+                                    <form method="POST" action="{{ url_for('super_admin_fire_staff', campus_id=campus.id, staff_id=s.id) }}" class="d-inline" onsubmit="return confirmDelete(this)" data-confirm-msg="Remove {{ s.full_name }}?">
                                         <button type="submit" class="btn btn-sm btn-outline-danger"><i class="bi bi-person-x"></i></button>
                                     </form>
                                 </td>

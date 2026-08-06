@@ -1,7 +1,7 @@
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import UserMixin
 from werkzeug.security import generate_password_hash, check_password_hash
-from datetime import datetime
+from datetime import datetime, timedelta
 
 db = SQLAlchemy()
 
@@ -62,6 +62,8 @@ class User(UserMixin, db.Model):
     reg_number = db.Column(db.String(50), unique=True, index=True)
     is_active = db.Column(db.Boolean, default=True, index=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+    failed_login_attempts = db.Column(db.Integer, default=0)
+    locked_until = db.Column(db.DateTime, nullable=True)
 
     teacher_subject = db.relationship('Subject', backref=db.backref('teacher', uselist=False, lazy=True),
                                       lazy=True, foreign_keys=[subject_id])
@@ -72,6 +74,24 @@ class User(UserMixin, db.Model):
 
     def check_password(self, password):
         return check_password_hash(self.password_hash, password)
+
+    def is_login_locked(self):
+        if self.locked_until and datetime.utcnow() < self.locked_until:
+            return True
+        if self.locked_until:
+            self.locked_until = None
+            self.failed_login_attempts = 0
+        return False
+
+    def record_failed_login(self):
+        self.failed_login_attempts = (self.failed_login_attempts or 0) + 1
+        if self.failed_login_attempts >= 5:
+            self.locked_until = datetime.utcnow() + timedelta(minutes=15)
+            self.failed_login_attempts = 0
+
+    def reset_login_failures(self):
+        self.failed_login_attempts = 0
+        self.locked_until = None
 
 
 class Subject(db.Model):
@@ -112,6 +132,8 @@ class Student(UserMixin, db.Model):
     password_hash = db.Column(db.String(256), nullable=False)
     is_active = db.Column(db.Boolean, default=True, index=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+    failed_login_attempts = db.Column(db.Integer, default=0)
+    locked_until = db.Column(db.DateTime, nullable=True)
 
     subjects = db.relationship('StudentSubject', backref='student', lazy=True)
     monthly_tests = db.relationship('MonthlyTest', backref='student', lazy=True)
@@ -127,6 +149,24 @@ class Student(UserMixin, db.Model):
 
     def get_id(self):
         return f'student_{self.id}'
+
+    def is_login_locked(self):
+        if self.locked_until and datetime.utcnow() < self.locked_until:
+            return True
+        if self.locked_until:
+            self.locked_until = None
+            self.failed_login_attempts = 0
+        return False
+
+    def record_failed_login(self):
+        self.failed_login_attempts = (self.failed_login_attempts or 0) + 1
+        if self.failed_login_attempts >= 5:
+            self.locked_until = datetime.utcnow() + timedelta(minutes=15)
+            self.failed_login_attempts = 0
+
+    def reset_login_failures(self):
+        self.failed_login_attempts = 0
+        self.locked_until = None
 
     @property
     def full_name(self):

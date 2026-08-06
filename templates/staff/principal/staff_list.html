@@ -38,7 +38,7 @@
                                 <td><small>{{ s.phone or '-' }}</small></td>
                                 <td>
                                     <a href="{{ url_for('principal_edit_staff', staff_id=s.id) }}" class="btn btn-sm btn-outline-primary"><i class="bi bi-pencil"></i></a>
-                                    <form method="POST" action="{{ url_for('principal_fire_staff', staff_id=s.id) }}" class="d-inline" onsubmit="return confirm('Remove {{ s.full_name }} and their login?');">
+                                    <form method="POST" action="{{ url_for('principal_fire_staff', staff_id=s.id) }}" class="d-inline" onsubmit="return confirmDelete(this)" data-confirm-msg="Remove {{ s.full_name }} and their login?">
                                         <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
                                         <button type="submit" class="btn btn-sm btn-outline-danger"><i class="bi bi-person-x"></i></button>
                                     </form>

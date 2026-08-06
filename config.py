@@ -43,3 +43,10 @@ class Config:
     MAIL_DEFAULT_SENDER = os.environ.get('MAIL_DEFAULT_SENDER', 'noreply@schoolbridge.zw')
 
     ENABLE_SETUP = os.environ.get('ENABLE_SETUP', '').lower() == 'true'
+
+    _render = os.environ.get('RENDER', '') == 'true'
+    SESSION_COOKIE_HTTPONLY = True
+    SESSION_COOKIE_SAMESITE = 'Lax'
+    SESSION_COOKIE_SECURE = os.environ.get(
+        'SESSION_COOKIE_SECURE', str(_render).lower()
+    ).lower() == 'true'
